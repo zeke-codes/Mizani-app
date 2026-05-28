@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mizani — Premium Financial Management</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0D0F14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- MOBILE OVERLAY -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 16C4 9.373 9.373 4 16 4s12 5.373 12 12-5.373 12-12 12S4 22.627 4 16z" fill="url(#logoGrad)"/>
+          <path d="M10 20l4-8 4 6 2-3 2 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="logoGrad" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#C9A84C"/>
+              <stop offset="1" stop-color="#E8C86D"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="logo-text">Mizani</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
+        </span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-section="transactions">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 000 4h6a2 2 0 000-4M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="nav-label">Transactions</span>
+      </a>
+      <a href="#" class="nav-item" data-section="budgets">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="nav-label">Budgets</span>
+      </a>
+      <a href="#" class="nav-item" data-section="analytics">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 17l5-5 4 4 5-6 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 20h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="nav-label">Analytics</span>
+      </a>
+      <a href="#" class="nav-item" data-section="settings">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.8"/></svg>
+        </span>
+        <span class="nav-label">Settings</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-profile">
+        <div class="user-avatar">FT</div>
+        <div class="user-info">
+          <span class="user-name">Mizani Pro</span>
+          <span class="user-plan">Personal Plan</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="main-content" id="mainContent">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <button class="hamburger" id="hamburgerBtn" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+      <div class="topbar-actions">
+        <button class="btn-icon" id="themeToggleTop" title="Toggle Theme">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="btn-primary" id="addTxnBtn">
+          <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Add Transaction
+        </button>
+      </div>
+    </header>
+
+    <!-- ===== DASHBOARD SECTION ===== -->
+    <section class="section active" id="section-dashboard">
+      <div class="section-header">
+        <h1 class="section-title" id="greetingText">Welcome back 👋</h1>
+        <p class="section-subtitle">Here's your financial overview</p>
+      </div>
+
+      <!-- STAT CARDS -->
+      <div class="stat-cards">
+        <div class="stat-card balance-card">
+          <div class="stat-card-header">
+            <span class="stat-label">Total Balance</span>
+            <div class="stat-icon balance-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.93V18h-2v-1.07A4.004 4.004 0 018 13h2c0 1.1.9 2 2 2s2-.9 2-2c0-1.1-.9-2-2-2-2.21 0-4-1.79-4-4 0-1.86 1.28-3.41 3-3.86V3h2v1.14c1.72.45 3 2 3 3.86h-2c0-1.1-.9-2-2-2s-2 .9-2 2 .9 2 2 2c2.21 0 4 1.79 4 4 0 1.86-1.28 3.41-3 3.93z" fill="currentColor"/></svg>
+            </div>
+          </div>
+          <div class="stat-value" id="totalBalance">$0.00</div>
+          <div class="stat-trend" id="balanceTrend">
+            <span class="trend-label">Current balance</span>
+          </div>
+        </div>
+
+        <div class="stat-card income-card">
+          <div class="stat-card-header">
+            <span class="stat-label">Total Income</span>
+            <div class="stat-icon income-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="stat-value" id="totalIncome">$0.00</div>
+          <div class="stat-trend" id="incomeTrend">
+            <span class="trend-label">All time income</span>
+          </div>
+        </div>
+
+        <div class="stat-card expense-card">
+          <div class="stat-card-header">
+            <span class="stat-label">Total Expenses</span>
+            <div class="stat-icon expense-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="stat-value" id="totalExpenses">$0.00</div>
+          <div class="stat-trend" id="expenseTrend">
+            <span class="trend-label">All time expenses</span>
+          </div>
+        </div>
+
+        <div class="stat-card savings-card">
+          <div class="stat-card-header">
+            <span class="stat-label">Monthly Savings</span>
+            <div class="stat-icon savings-icon">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="stat-value" id="monthlySavings">$0.00</div>
+          <div class="stat-trend" id="savingsTrend">
+            <span class="trend-label">This month</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RECENT + QUICK CHART -->
+      <div class="dashboard-grid">
+        <div class="card recent-transactions-card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Transactions</h3>
+            <a href="#" class="card-action" data-section="transactions">View all</a>
+          </div>
+          <div class="recent-list" id="recentTransactions">
+            <div class="empty-state">
+              <div class="empty-icon">💸</div>
+              <p>No transactions yet</p>
+              <span>Add your first transaction to get started</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card spending-chart-card">
+          <div class="card-header">
+            <h3 class="card-title">Spending by Category</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+          </div>
+          <div class="chart-legend" id="categoryLegend"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TRANSACTIONS SECTION ===== -->
+    <section class="section" id="section-transactions">
+      <div class="section-header">
+        <h1 class="section-title">Transactions</h1>
+        <p class="section-subtitle">Manage and track all your transactions</p>
+      </div>
+
+      <div class="txn-controls">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" class="search-icon"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.8"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input type="text" id="txnSearch" class="search-input" placeholder="Search transactions…" />
+        </div>
+        <div class="filter-group">
+          <select id="filterType" class="filter-select">
+            <option value="all">All Types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+          <select id="filterCategory" class="filter-select">
+            <option value="all">All Categories</option>
+          </select>
+          <select id="sortBy" class="filter-select">
+            <option value="date-desc">Newest First</option>
+            <option value="date-asc">Oldest First</option>
+            <option value="amount-desc">Highest Amount</option>
+            <option value="amount-asc">Lowest Amount</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card transactions-card">
+        <div class="transactions-table-wrap">
+          <table class="transactions-table">
+            <thead>
+              <tr>
+                <th>Transaction</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsBody">
+              <tr class="empty-row">
+                <td colspan="6">
+                  <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <p>No transactions found</p>
+                    <span>Try adjusting your filters or add a new transaction</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== BUDGETS SECTION ===== -->
+    <section class="section" id="section-budgets">
+      <div class="section-header">
+        <h1 class="section-title">Budgets</h1>
+        <p class="section-subtitle">Set and track monthly spending limits</p>
+      </div>
+
+      <div class="budgets-grid">
+        <div class="card budget-form-card">
+          <div class="card-header">
+            <h3 class="card-title">Set Budget</h3>
+          </div>
+          <div class="budget-form">
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select id="budgetCategory" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Monthly Limit</label>
+              <div class="input-prefix-wrap">
+                <span class="input-prefix" id="budgetCurrencyPrefix">$</span>
+                <input type="number" id="budgetAmount" class="form-control" placeholder="0.00" min="0" step="0.01" />
+              </div>
+            </div>
+            <button class="btn-primary full-width" id="saveBudgetBtn">Save Budget</button>
+          </div>
+        </div>
+
+        <div class="budget-list-wrap">
+          <div id="budgetList" class="budget-list"></div>
+          <div class="empty-state" id="budgetEmpty" style="display:none;">
+            <div class="empty-icon">🎯</div>
+            <p>No budgets set</p>
+            <span>Set category budgets to track your spending</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ANALYTICS SECTION ===== -->
+    <section class="section" id="section-analytics">
+      <div class="section-header">
+        <h1 class="section-title">Analytics</h1>
+        <p class="section-subtitle">Visualize your financial trends</p>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="card analytics-card wide-card">
+          <div class="card-header">
+            <h3 class="card-title">Income vs Expenses — Last 6 Months</h3>
+          </div>
+          <div class="chart-container tall">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card analytics-card">
+          <div class="card-header">
+            <h3 class="card-title">Expense Breakdown</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="breakdownChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card analytics-card">
+          <div class="card-header">
+            <h3 class="card-title">Monthly Summary</h3>
+          </div>
+          <div id="monthlySummaryList" class="monthly-summary-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SETTINGS SECTION ===== -->
+    <section class="section" id="section-settings">
+      <div class="section-header">
+        <h1 class="section-title">Settings</h1>
+        <p class="section-subtitle">Customize your FlowTrack experience</p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="card settings-card">
+          <h3 class="settings-group-title">Appearance</h3>
+          <div class="settings-row">
+            <div class="settings-info">
+              <span class="settings-label">Dark Mode</span>
+              <span class="settings-desc">Toggle between dark and light theme</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="themeToggle" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card settings-card">
+          <h3 class="settings-group-title">Currency</h3>
+          <div class="settings-row">
+            <div class="settings-info">
+              <span class="settings-label">Display Currency</span>
+              <span class="settings-desc">Choose your preferred currency</span>
+            </div>
+            <select id="currencySelect" class="filter-select">
+              <option value="USD">$ USD</option>
+              <option value="EUR">€ EUR</option>
+              <option value="GBP">£ GBP</option>
+              <option value="KES">KSh KES</option>
+              <option value="JPY">¥ JPY</option>
+              <option value="CAD">$ CAD</option>
+              <option value="AUD">$ AUD</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card settings-card">
+          <h3 class="settings-group-title">Data Management</h3>
+          <div class="settings-row">
+            <div class="settings-info">
+              <span class="settings-label">Export Transactions</span>
+              <span class="settings-desc">Download all transactions as CSV</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-secondary" id="exportBtn">Export</button>
+              <button class="btn-secondary" id="importBtn">Import</button>
+              <input type="file" id="importInput" accept=".csv" style="display:none" />
+            </div>
+          </div>
+          <div class="settings-divider"></div>
+          <div class="settings-row">
+            <div class="settings-info">
+              <span class="settings-label">Clear All Data</span>
+              <span class="settings-desc danger-text">Permanently delete all transactions and budgets</span>
+            </div>
+            <button class="btn-danger" id="clearDataBtn">Clear Data</button>
+          </div>
+        </div>
+
+        <div class="card settings-card about-card" id="assistantCard">
+          <h3 class="settings-group-title">About FlowTrack</h3>
+          <div class="about-info">
+            <div class="about-logo">
+              <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="40">
+                <path d="M4 16C4 9.373 9.373 4 16 4s12 5.373 12 12-5.373 12-12 12S4 22.627 4 16z" fill="url(#logoGrad2)"/>
+                <path d="M10 20l4-8 4 6 2-3 2 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                  <linearGradient id="logoGrad2" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#C9A84C"/><stop offset="1" stop-color="#E8C86D"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <div>
+              <p class="about-name">Mizani Assistant</p>
+              <p class="about-desc" id="assistantMessage">Monitoring your spending patterns to provide smart insights.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== MOBILE NAVIGATION ===== -->
+  <nav class="mobile-nav">
+    <button class="mobile-nav-item active" data-section="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-item" data-section="transactions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      <span>History</span>
+    </button>
+    <div class="mobile-nav-fab-space"></div>
+    <button class="mobile-nav-item" data-section="budgets">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span>Budgets</span>
+    </button>
+    <button class="mobile-nav-item" data-section="analytics">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      <span>Stats</span>
+    </button>
+  </nav>
+  <button class="fab" id="fabBtn" aria-label="Add Transaction">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <!-- ===== ADD/EDIT TRANSACTION MODAL ===== -->
+  <div class="modal-overlay" id="txnModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Add Transaction</h2>
+        <button class="modal-close" id="closeModal" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Type Toggle -->
+        <div class="type-toggle">
+          <button class="type-btn active" data-type="expense">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 19V5M5 12l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Expense
+          </button>
+          <button class="type-btn" data-type="income">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 5v14M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Income
+          </button>
+        </div>
+
+        <input type="hidden" id="txnId" />
+        <input type="hidden" id="txnType" value="expense" />
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="txnTitle">Title *</label>
+            <input type="text" id="txnTitle" class="form-control" placeholder="e.g. Grocery shopping" />
+            <span class="form-error" id="titleError"></span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="txnAmount">Amount *</label>
+            <div class="input-prefix-wrap">
+              <span class="input-prefix" id="modalCurrencyPrefix">$</span>
+              <input type="number" id="txnAmount" class="form-control" placeholder="0.00" min="0.01" step="0.01" />
+            </div>
+            <span class="form-error" id="amountError"></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="txnCategory">Category *</label>
+            <select id="txnCategory" class="form-control"></select>
+            <span class="form-error" id="categoryError"></span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="txnDate">Date *</label>
+            <input type="date" id="txnDate" class="form-control" />
+            <span class="form-error" id="dateError"></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="txnNotes">Notes</label>
+          <textarea id="txnNotes" class="form-control textarea" placeholder="Optional notes…" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelModal">Cancel</button>
+        <button class="btn-primary" id="saveTxnBtn">Save Transaction</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CONFIRM MODAL ===== -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal modal-sm" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 class="modal-title" id="confirmTitle">Confirm Action</h2>
+        <button class="modal-close" id="closeConfirm">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage" class="confirm-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelConfirm">Cancel</button>
+        <button class="btn-danger" id="okConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
