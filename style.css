@@ -387,6 +387,77 @@ body {
   transition: all var(--transition);
 }
 
+/* ---- COACH WIDGET ---- */
+.coach-widget {
+  background: var(--gold-dim);
+  border: 1px solid var(--gold-glow);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+.coach-avatar {
+  width: 48px;
+  height: 48px;
+  background: var(--gold);
+  color: var(--text-inverse);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.coach-avatar svg { width: 28px; height: 28px; }
+
+.coach-name {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+
+.coach-bubble {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+/* ---- SCORE PILL ---- */
+.score-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border-radius: 100px;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid var(--gold-glow);
+}
+
+/* ---- WEEKLY REVIEW ---- */
+.weekly-review-content {
+  padding: 0 22px 22px;
+}
+
+.review-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-val {
+  font-weight: 700;
+  color: var(--gold);
+}
+
 /* ---- BUTTONS ---- */
 .btn-primary {
   display: inline-flex;
@@ -1122,6 +1193,51 @@ body {
 
 .budget-delete-btn svg {
   width: 14px; height: 14px; stroke: currentColor;
+}
+
+/* ---- GOALS SECTION ---- */
+.goals-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+}
+
+.goal-item {
+  background: var(--bg-card);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.goal-name { font-weight: 700; font-size: 16px; }
+
+.goal-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.reflection-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.reflection-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
 }
 
 /* ---- ANALYTICS SECTION ---- */

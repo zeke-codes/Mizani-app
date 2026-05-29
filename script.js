@@ -35,7 +35,8 @@ const LS_KEYS = {
   TRANSACTIONS: 'mizani_transactions',
   BUDGETS:      'mizani_budgets',
   SETTINGS:     'mizani_settings',
-  LAST_REMINDER: 'mizani_last_reminder'
+  LAST_REMINDER: 'mizani_last_reminder',
+  GOALS:        'mizani_goals'
 };
 
 // ============================================================
@@ -45,6 +46,7 @@ const LS_KEYS = {
 let state = {
   transactions: [],
   budgets:      {},
+  goals:        [],
   settings: {
     theme:    'dark',
     currency: 'USD',
@@ -64,10 +66,12 @@ function loadState() {
     const txns   = localStorage.getItem(LS_KEYS.TRANSACTIONS);
     const budgets = localStorage.getItem(LS_KEYS.BUDGETS);
     const settings = localStorage.getItem(LS_KEYS.SETTINGS);
+    const goals   = localStorage.getItem(LS_KEYS.GOALS);
 
     if (txns)     state.transactions = JSON.parse(txns);
     if (budgets)  state.budgets      = JSON.parse(budgets);
     if (settings) state.settings     = { ...state.settings, ...JSON.parse(settings) };
+    if (goals)    state.goals        = JSON.parse(goals);
 
     // Legacy support for FlowTrack users
     if (!txns && localStorage.getItem('flowtrack_transactions')) {
@@ -90,6 +94,10 @@ function saveBudgets() {
 
 function saveSettings() {
   localStorage.setItem(LS_KEYS.SETTINGS, JSON.stringify(state.settings));
+}
+
+function saveGoals() {
+  localStorage.setItem(LS_KEYS.GOALS, JSON.stringify(state.goals));
 }
 
 // ============================================================
@@ -236,6 +244,7 @@ function navigateTo(section) {
   if (section === 'transactions') renderTransactionsTable();
   if (section === 'budgets')      renderBudgets();
   if (section === 'analytics')    renderAnalytics();
+  if (section === 'goals')        renderGoals();
 
   // Close mobile sidebar
   closeSidebar();
@@ -359,11 +368,98 @@ function renderDashboard() {
   animateValue(document.getElementById('totalExpenses'),prevStats.expense, totExpense);
   animateValue(document.getElementById('monthlySavings'),prevStats.savings, savings);
 
-  runAssistant();
+  runCoach();
   prevStats = { balance, income: totIncome, expense: totExpense, savings };
 
   renderRecentTransactions();
   renderCategoryChart();
+  renderWeeklyReview();
+  updateMizaniScore();
+}
+
+function updateMizaniScore() {
+  const score = calculateMizaniScore();
+  const el = document.getElementById('mizaniScore');
+  if (el) el.textContent = score;
+}
+
+function calculateMizaniScore() {
+  if (state.transactions.length === 0) return 0;
+  let score = 50; 
+
+  // Budget Adherence
+  const curMonth = getCurrentMonthStr();
+  let budgetsMet = 0;
+  const budgetEntries = Object.entries(state.budgets);
+  if (budgetEntries.length > 0) {
+    budgetEntries.forEach(([catId, limit]) => {
+      const spent = state.transactions
+        .filter(t => t.type === 'expense' && t.category === catId && getMonthYear(t.date) === curMonth)
+        .reduce((s, t) => s + t.amount, 0);
+      if (spent <= limit) budgetsMet++;
+    });
+    score += (budgetsMet / budgetEntries.length) * 30;
+  }
+
+  // Impulse Control
+  const recentExpenses = state.transactions.filter(t => t.type === 'expense').slice(0, 10);
+  const plannedCount = recentExpenses.filter(t => t.reflection?.isPlanned !== false).length;
+  if (recentExpenses.length > 0) score += (plannedCount / recentExpenses.length) * 20;
+
+  return Math.min(Math.round(score), 100);
+}
+
+function renderWeeklyReview() {
+  const container = document.getElementById('weeklyReview');
+  if (!container) return;
+
+  const now = new Date();
+  const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+  const expenses = state.transactions.filter(t => t.type === 'expense' && new Date(t.date) >= startOfWeek);
+  
+  if (expenses.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data for this week yet.</div>';
+    return;
+  }
+
+  const totalSpent = expenses.reduce((s, t) => s + t.amount, 0);
+  const catTotals = {};
+  expenses.forEach(t => catTotals[t.category] = (catTotals[t.category] || 0) + t.amount);
+  const topCatId = Object.keys(catTotals).reduce((a, b) => catTotals[a] > catTotals[b] ? a : b);
+
+  container.innerHTML = `
+    <div class="review-item"><span>Total Spent</span><span class="review-val">${formatAmount(totalSpent)}</span></div>
+    <div class="review-item"><span>Top Category</span><span class="review-val">${getCategory(topCatId).label}</span></div>
+  `;
+}
+
+function renderGoals() {
+  const container = document.getElementById('goalList');
+  if (!container || !state.goals) return;
+  
+  const { balance } = calcStats();
+  container.innerHTML = state.goals.map(g => {
+    const pct = Math.min((Math.max(balance, 0) / g.target) * 100, 100);
+    return `
+      <div class="goal-item">
+        <div class="goal-header"><span class="goal-name">${escapeHtml(g.name)}</span><button class="action-btn delete" onclick="deleteGoal('${g.id}')">×</button></div>
+        <div class="budget-progress-bar"><div class="budget-progress-fill" style="width:${pct}%"></div></div>
+        <div class="goal-footer"><span>${formatAmount(Math.max(balance, 0))} saved</span><span>of ${formatAmount(g.target)}</span></div>
+      </div>`;
+  }).join('');
+}
+
+function saveGoal() {
+  const name = document.getElementById('goalName').value.trim();
+  const target = parseFloat(document.getElementById('goalTarget').value);
+  if (!name || isNaN(target)) return showToast('Enter valid goal info', 'error');
+  state.goals.push({ id: Date.now(), name, target });
+  saveGoals(); renderGoals(); showToast('Goal created!', 'success');
+}
+
+function deleteGoal(id) {
+  state.goals = state.goals.filter(g => g.id != id);
+  saveGoals(); renderGoals();
 }
 
 function renderRecentTransactions() {
@@ -391,7 +487,7 @@ function renderRecentTransactions() {
         <div class="recent-cat-icon" style="background:${cat.bg}">${cat.emoji}</div>
         <div class="recent-item-info">
           <div class="recent-item-title">${escapeHtml(t.title)}</div>
-          <div class="recent-item-cat">${cat.label} · ${formatDate(t.date)}</div>
+          <div class="recent-item-cat">${cat.label} · ${formatDate(t.date)} ${t.reflection?.isPlanned === false ? '⚡ impulse' : ''}</div>
         </div>
         <div class="recent-item-amount ${amtClass}">${sign}${formatAmount(t.amount)}</div>
       </div>`;
@@ -493,6 +589,10 @@ function openAddTransactionModal() {
   document.getElementById('txnCategory').value = CATEGORIES[0].id;
   document.getElementById('txnDate').value = getTodayStr();
   document.getElementById('txnNotes').value = '';
+  
+  document.getElementById('isPlanned').checked = true;
+  document.getElementById('addsValue').checked = true;
+  document.getElementById('buyAgain').checked = true;
 
   // Reset type toggle
   setTypeToggle('expense');
@@ -515,6 +615,10 @@ function editTransaction(id) {
   document.getElementById('txnCategory').value = t.category;
   document.getElementById('txnDate').value     = t.date;
   document.getElementById('txnNotes').value    = t.notes || '';
+
+  document.getElementById('isPlanned').checked = t.reflection?.isPlanned ?? true;
+  document.getElementById('addsValue').checked = t.reflection?.addsValue ?? true;
+  document.getElementById('buyAgain').checked = t.reflection?.buyAgain ?? true;
 
   setTypeToggle(t.type);
   clearFormErrors();
@@ -544,15 +648,21 @@ function saveTransaction() {
   const category = document.getElementById('txnCategory').value;
   const date     = document.getElementById('txnDate').value;
   const notes    = document.getElementById('txnNotes').value.trim();
+  
+  const reflection = {
+    isPlanned: document.getElementById('isPlanned').checked,
+    addsValue: document.getElementById('addsValue').checked,
+    buyAgain:  document.getElementById('buyAgain').checked,
+  };
 
   if (state.editingId) {
     const idx = state.transactions.findIndex(t => t.id === state.editingId);
     if (idx !== -1) {
-      state.transactions[idx] = { id: state.editingId, type, title, amount, category, date, notes };
+      state.transactions[idx] = { id: state.editingId, type, title, amount, category, date, notes, reflection };
     }
     showToast('Transaction updated', 'success');
   } else {
-    const newTxn = { id: generateId(), type, title, amount, category, date, notes, createdAt: Date.now() };
+    const newTxn = { id: generateId(), type, title, amount, category, date, notes, reflection, createdAt: Date.now() };
     state.transactions.unshift(newTxn);
     showToast('Transaction added', 'success');
   }
@@ -710,6 +820,7 @@ function renderAnalytics() {
 
 function renderAllCharts() {
   if (state.activeSection === 'dashboard')  renderCategoryChart();
+  if (state.activeSection === 'dashboard')  renderWeeklyReview();
   if (state.activeSection === 'analytics')  renderAnalytics();
 }
 
@@ -1050,34 +1161,50 @@ function escapeHtml(str) {
 }
 
 // ============================================================
-// SMART FINANCIAL ASSISTANT
+// MIZANI COACH (AI-LIKE EXPERIENCE)
 // ============================================================
 
-function runAssistant() {
-  const assistantMsg = document.getElementById('assistantMessage');
-  if (!assistantMsg) return;
+function runCoach() {
+  const coachMsg = document.getElementById('coachMessage');
+  if (!coachMsg) return;
 
   const today = getTodayStr();
-  const loggedToday = state.transactions.some(t => t.date === today);
-  const lastReminder = localStorage.getItem(LS_KEYS.LAST_REMINDER);
-  
-  // Logic 1: Spending Nudge
   const { totExpense, totIncome } = calcStats();
+  
+  // Get impulse totals
+  const impulseTotal = state.transactions
+    .filter(t => t.type === 'expense' && t.reflection?.isPlanned === false)
+    .reduce((s,t) => s + t.amount, 0);
+
+  // Detect overspending vs averages (simple logic)
+  const expenses = state.transactions.filter(t => t.type === 'expense');
+  const avgExpense = expenses.length > 0 ? (totExpense / 30) : 0; // monthly avg per day
+  
+  let insights = [];
+  
   if (totExpense > totIncome && totIncome > 0) {
-    assistantMsg.textContent = "Insight: You've spent more than your income this month. Consider reviewing your budgets.";
-  } else if (!loggedToday) {
-    assistantMsg.textContent = "Reminder: You haven't logged any transactions today. Keeping track daily improves accuracy!";
-    
-    // Periodic Pop-up (once every 24h)
-    if (lastReminder !== today) {
-      setTimeout(() => {
-        showToast("Did you spend money today? Log it in Mizani! ✍️", "info");
-        localStorage.setItem(LS_KEYS.LAST_REMINDER, today);
-      }, 5000);
-    }
-  } else {
-    assistantMsg.textContent = "Your finances look healthy. Keep maintaining your tracking habit!";
+    insights.push("You've spent more than you earned. Let's look at your biggest categories.");
   }
+  if (impulseTotal > 0) {
+    insights.push(`You've spent ${formatAmount(impulseTotal)} on impulse purchases. Pause before the next one!`);
+  }
+  
+  // Alerts for budget overruns
+  const overBudgets = Object.entries(state.budgets).filter(([catId, limit]) => {
+    const spent = state.transactions.filter(t => t.category === catId && t.type === 'expense').reduce((s,t) => s + t.amount, 0);
+    return spent > limit;
+  });
+  
+  if (overBudgets.length > 0) {
+    const cat = getCategory(overBudgets[0][0]);
+    insights.push(`Warning: You've exceeded your budget for ${cat.label}.`);
+  }
+  
+  if (insights.length === 0) {
+    insights.push("Your finances look stable. Keep up the great tracking habit!");
+  }
+    
+  coachMsg.textContent = insights[Math.floor(Math.random() * insights.length)];
 }
 
 // ============================================================
@@ -1208,6 +1335,9 @@ function setupEventListeners() {
 
   // Budget save
   document.getElementById('saveBudgetBtn').addEventListener('click', saveBudget);
+  
+  // Goals save
+  document.getElementById('saveGoalBtn')?.addEventListener('click', saveGoal);
 
   // Settings: theme toggle
   const themeToggle = document.getElementById('themeToggle');
@@ -1269,6 +1399,7 @@ function init() {
   updateCurrencyPrefixes();
 
   // Sync theme toggle
+  if (document.getElementById('themeToggle'))
   document.getElementById('themeToggle').checked = state.settings.theme === 'dark';
 
   setupEventListeners();
