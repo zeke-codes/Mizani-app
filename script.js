@@ -1266,6 +1266,7 @@ function setupEventListeners() {
   // Navigation
   document.querySelectorAll('.nav-item').forEach(el => {
     el.addEventListener('click', e => {
+      if (!el.dataset.section) return;
       e.preventDefault();
       navigateTo(el.dataset.section);
     });

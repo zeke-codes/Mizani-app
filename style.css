@@ -1859,10 +1859,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 @media (max-width: 480px) {
-  .stat-cards {
-    grid-template-columns: 1fr;
-  }
-
   .modal {
     border-radius: var(--radius-lg);
   }
