@@ -43,7 +43,8 @@ const LS_KEYS = {
   LAST_REMINDER: 'mizani_last_reminder',
   GOALS:        'mizani_goals',
   ACCOUNTS:     'mizani_accounts',
-  ACTIVE_ACCOUNT: 'mizani_active_account'
+  ACTIVE_ACCOUNT: 'mizani_active_account',
+  GUEST_SESSION: 'mizani_guest_session'
 };
 
 // ============================================================
@@ -56,6 +57,7 @@ let state = {
   goals:        [],
   accounts:     [{ id: 'default', name: 'Personal Account', type: 'personal' }],
   activeAccountId: 'default',
+  isGuestMode:    false,
   settings: {
     theme:    'dark',
     currency: 'USD',
@@ -78,11 +80,13 @@ function loadState() {
     const goals   = localStorage.getItem(LS_KEYS.GOALS);
     const accounts = localStorage.getItem(LS_KEYS.ACCOUNTS);
     const activeAcc = localStorage.getItem(LS_KEYS.ACTIVE_ACCOUNT);
+    const guestSession = localStorage.getItem(LS_KEYS.GUEST_SESSION);
 
     if (txns)     state.transactions = JSON.parse(txns);
     if (budgets)  state.budgets      = JSON.parse(budgets);
     if (settings) state.settings     = { ...state.settings, ...JSON.parse(settings) };
     if (goals)    state.goals        = JSON.parse(goals);
+    if (guestSession === 'true') state.isGuestMode = true;
 
     // Load and validate accounts; fallback to default Personal Account if none found
     if (accounts) {
@@ -110,6 +114,8 @@ function loadState() {
 }
 
 function saveTransactions() {
+  // Data is saved to localStorage only. 
+  // For Guest/Demo mode, no backend synchronization is performed.
   localStorage.setItem(LS_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
 }
 
@@ -280,6 +286,9 @@ function navigateTo(section) {
   document.getElementById('topbarTitle').textContent = titles[section] || section;
 
   state.activeSection = section;
+
+  // Update sidebar profile/auth status
+  renderSidebarFooter();
 
   // Section-specific rendering
   if (section === 'dashboard')    renderDashboard();
@@ -1184,6 +1193,8 @@ function clearAllData() {
     () => {
       state.transactions = [];
       state.budgets = {};
+      state.isGuestMode = false;
+      localStorage.removeItem(LS_KEYS.GUEST_SESSION);
       saveTransactions();
       saveBudgets();
       showToast('All data cleared', 'success');
@@ -1212,6 +1223,48 @@ function renderCurrentSection() {
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function renderSidebarFooter() {
+  const footer = document.getElementById('sidebarFooter');
+  if (!footer) return;
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session) {
+    const email = session.user.email || 'User';
+    const initials = email.substring(0, 2).toUpperCase();
+    footer.innerHTML = `
+      <div class="user-profile">
+        <div class="user-avatar">${initials}</div>
+        <div class="user-info">
+          <span class="user-name">${escapeHtml(email.split('@')[0])}</span>
+          <span class="user-plan">Authenticated</span>
+        </div>
+      </div>
+      <button class="btn-secondary full-width" style="margin-top:10px; height:34px; font-size: 0.8rem;" id="logoutBtn">Log Out</button>
+    `;
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      navigateTo('landing');
+    });
+  } else if (state.isGuestMode) {
+    footer.innerHTML = `
+      <div class="user-profile">
+        <div class="user-avatar">G</div>
+        <div class="user-info">
+          <span class="user-name">Guest Mode</span>
+          <span class="user-plan">Local Storage</span>
+        </div>
+      </div>
+      <button class="btn-primary full-width" style="margin-top:10px; height:34px; font-size: 0.8rem;" id="sidebarAuthBtn">Sign Up / Log In</button>
+    `;
+    document.getElementById('sidebarAuthBtn')?.addEventListener('click', () => {
+      navigateTo('auth');
+    });
+  } else {
+    footer.innerHTML = '';
+  }
 }
 
 // ============================================================
@@ -1353,11 +1406,18 @@ function setupEventListeners() {
   document.getElementById('fabBtn').addEventListener('click', openAddTransactionModal);
 
   // Landing CTAs
-  document.getElementById('getStartedBtn').addEventListener('click', () => {
+  document.getElementById('getStartedBtn').addEventListener('click', async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return navigateTo('dashboard');
     navigateTo('auth');
   });
+  
   document.getElementById('tryDemoBtn').addEventListener('click', () => {
+    // In demo mode, data should not be pre-seeded, allowing users to input their own values.
+    state.isGuestMode = true;
+    localStorage.setItem(LS_KEYS.GUEST_SESSION, 'true');
     navigateTo('dashboard');
+    showToast('Demo Mode: Your data is stored locally and will not be synced to the backend.', 'info');
   });
 
   // Hamburger
@@ -1506,6 +1566,8 @@ function setupEventListeners() {
         if (data.user && !data.session) {
           showToast('Success! Please check your email to confirm your account.', 'success');
         } else if (data.session) {
+          localStorage.removeItem(LS_KEYS.GUEST_SESSION);
+          state.isGuestMode = false;
           showToast('Account created and logged in!', 'success');
           navigateTo('dashboard');
         }
@@ -1516,6 +1578,8 @@ function setupEventListeners() {
         });
         if (error) throw error;
 
+        localStorage.removeItem(LS_KEYS.GUEST_SESSION);
+        state.isGuestMode = false;
         showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
         navigateTo('dashboard');
       }
@@ -1526,13 +1590,67 @@ function setupEventListeners() {
       submitBtn.textContent = isSignup ? 'Create Account' : 'Log In';
     }
   });
+
+  // Listen for auth state changes to update sidebar footer
+  supabase.auth.onAuthStateChange(() => {
+    renderSidebarFooter();
+  });
+}
+
+// ============================================================
+// DEMO DATA GENERATOR
+// ============================================================
+
+function loadDemoData() {
+  const today = new Date();
+  const dummyTransactions = [
+    {
+      id: 'demo_1',
+      type: 'income',
+      title: 'Monthly Salary',
+      amount: 5000,
+      category: 'salary',
+      date: getTodayStr(),
+      accountId: 'default',
+      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
+    },
+    {
+      id: 'demo_2',
+      type: 'expense',
+      title: 'Whole Foods Market',
+      amount: 150.25,
+      category: 'food',
+      date: getTodayStr(),
+      accountId: 'default',
+      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
+    },
+    {
+      id: 'demo_3',
+      type: 'expense',
+      title: 'Netflix Subscription',
+      amount: 15.99,
+      category: 'entertainment',
+      date: getTodayStr(),
+      accountId: 'default',
+      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
+    }
+  ];
+
+  state.transactions = dummyTransactions;
+  state.budgets = {
+    food: 600,
+    entertainment: 100
+  };
+  
+  saveTransactions();
+  saveBudgets();
 }
 
 // ============================================================
 // INIT
 // ============================================================
 
-function init() {
+async function init() {
   // PWA Registration
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -1563,11 +1681,15 @@ function init() {
 
   setupEventListeners();
 
-  // If no transactions exist, show landing page
-  if (state.transactions.length === 0) {
-    navigateTo('landing');
-  } else {
+  // Determine whether to show landing page or dashboard based on session and local data
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session || state.isGuestMode) {
+    // Logged in users or active guest sessions go straight to dashboard
     navigateTo('dashboard');
+  } else {
+    // First-time visitors or those who cleared data go to landing
+    navigateTo('landing');
   }
 }
 
