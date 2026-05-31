@@ -121,16 +121,31 @@ async function syncAccountToBackend(acc) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session || state.isGuestMode) return;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('accounts')
     .insert({
-      id: acc.id,
       user_id: session.user.id,
       name: acc.name,
       type: acc.type
-    });
+    })
+    .select()
+    .single();
 
-  if (error) console.error("Account sync error:", error.message);
+  if (error) {
+    console.error("Account sync error:", error.message);
+  } else if (data) {
+    // Update the temporary local ID with the permanent Database ID
+    const idx = state.accounts.findIndex(a => a.id === acc.id);
+    if (idx !== -1) {
+      state.accounts[idx].id = data.id;
+      // Update any transactions created using the temp ID
+      state.transactions.forEach(t => {
+        if (t.accountId === acc.id) t.accountId = data.id;
+      });
+      saveAccounts();
+      saveTransactions();
+    }
+  }
 }
 
 async function syncTransactionToBackend(txn) {
@@ -1411,6 +1426,9 @@ async function renderSidebarFooter() {
   const authHeader = document.getElementById('sidebarAuthHeader');
   if (!footer || !authHeader) return;
 
+  // Add bottom padding to prevent mobile navigation buttons from obscuring the UI
+  footer.style.paddingBottom = '40px';
+
   const { data } = await supabase.auth.getSession();
   const session = data?.session;
 
@@ -1426,10 +1444,6 @@ async function renderSidebarFooter() {
           <span class="user-name">${escapeHtml(email.split('@')[0])}</span>
           <span class="user-plan">Authenticated</span>
         </div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
-        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
       </div>
     `;
 
@@ -1486,11 +1500,13 @@ async function loadUserData() {
     .select('*')
     .eq('user_id', session.user.id);
   
-  if (dbAccounts && dbAccounts.length > 0) {
-    state.accounts = dbAccounts.map(a => ({ id: a.id, name: a.name, type: a.type }));
-    if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
-      state.activeAccountId = state.accounts[0].id;
-    }
+  // Always update state to match DB, defaulting to a basic account if empty
+  state.accounts = (dbAccounts && dbAccounts.length > 0)
+    ? dbAccounts.map(a => ({ id: a.id, name: a.name, type: a.type }))
+    : [{ id: 'default', name: 'Personal Account', type: 'personal' }];
+
+  if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
+    state.activeAccountId = state.accounts[0].id;
   }
 
   // Load Transactions from Supabase
@@ -1500,13 +1516,11 @@ async function loadUserData() {
     .eq('user_id', session.user.id)
     .order('date', { ascending: false });
 
-  if (dbTxns) {
-    state.transactions = dbTxns.map(t => ({
-      id: t.id, type: t.type, title: t.title, amount: t.amount,
-      category: t.category, date: t.date, notes: t.notes,
-      reflection: t.reflection, accountId: t.account_id || 'default'
-    }));
-  }
+  state.transactions = dbTxns ? dbTxns.map(t => ({
+    id: t.id, type: t.type, title: t.title, amount: t.amount,
+    category: t.category, date: t.date, notes: t.notes,
+    reflection: t.reflection, accountId: t.account_id || 'default'
+  })) : [];
 
   // Load Budgets
   const { data: dbBudgets } = await supabase
@@ -1514,8 +1528,8 @@ async function loadUserData() {
     .select('*')
     .eq('user_id', session.user.id);
   
+  state.budgets = {};
   if (dbBudgets) {
-    state.budgets = {};
     dbBudgets.forEach(b => { state.budgets[b.category_id] = b.limit_amount; });
   }
 
@@ -1525,9 +1539,7 @@ async function loadUserData() {
     .select('*')
     .eq('user_id', session.user.id);
   
-  if (dbGoals) {
-    state.goals = dbGoals.map(g => ({ id: g.id, name: g.name, target: g.target_amount }));
-  }
+  state.goals = dbGoals ? dbGoals.map(g => ({ id: g.id, name: g.name, target: g.target_amount })) : [];
 
   saveTransactions(); // Sync the cleaned/fetched data to localStorage
   saveBudgets();
