@@ -36,7 +36,9 @@ const LS_KEYS = {
   BUDGETS:      'mizani_budgets',
   SETTINGS:     'mizani_settings',
   LAST_REMINDER: 'mizani_last_reminder',
-  GOALS:        'mizani_goals'
+  GOALS:        'mizani_goals',
+  ACCOUNTS:     'mizani_accounts',
+  ACTIVE_ACCOUNT: 'mizani_active_account'
 };
 
 // ============================================================
@@ -47,6 +49,8 @@ let state = {
   transactions: [],
   budgets:      {},
   goals:        [],
+  accounts:     [{ id: 'default', name: 'Personal Account', type: 'personal' }],
+  activeAccountId: 'default',
   settings: {
     theme:    'dark',
     currency: 'USD',
@@ -67,11 +71,27 @@ function loadState() {
     const budgets = localStorage.getItem(LS_KEYS.BUDGETS);
     const settings = localStorage.getItem(LS_KEYS.SETTINGS);
     const goals   = localStorage.getItem(LS_KEYS.GOALS);
+    const accounts = localStorage.getItem(LS_KEYS.ACCOUNTS);
+    const activeAcc = localStorage.getItem(LS_KEYS.ACTIVE_ACCOUNT);
 
     if (txns)     state.transactions = JSON.parse(txns);
     if (budgets)  state.budgets      = JSON.parse(budgets);
     if (settings) state.settings     = { ...state.settings, ...JSON.parse(settings) };
     if (goals)    state.goals        = JSON.parse(goals);
+
+    // Load and validate accounts; fallback to default Personal Account if none found
+    if (accounts) {
+      const parsed = JSON.parse(accounts);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        state.accounts = parsed;
+      }
+    }
+    if (activeAcc && state.accounts.some(a => a.id === activeAcc)) {
+      state.activeAccountId = activeAcc;
+    }
+
+    // Migration: ensure all transactions have an accountId
+    state.transactions.forEach(t => { if (!t.accountId) t.accountId = 'default'; });
 
     // Legacy support for FlowTrack users
     if (!txns && localStorage.getItem('flowtrack_transactions')) {
@@ -98,6 +118,14 @@ function saveSettings() {
 
 function saveGoals() {
   localStorage.setItem(LS_KEYS.GOALS, JSON.stringify(state.goals));
+}
+
+function saveAccounts() {
+  localStorage.setItem(LS_KEYS.ACCOUNTS, JSON.stringify(state.accounts));
+}
+
+function saveActiveAccount() {
+  localStorage.setItem(LS_KEYS.ACTIVE_ACCOUNT, state.activeAccountId);
 }
 
 // ============================================================
@@ -212,6 +240,13 @@ function openConfirm(title, message, callback) {
 // ============================================================
 
 function navigateTo(section) {
+  // Handle layout visibility
+  const isLanding = section === 'landing' || section === 'auth';
+  document.getElementById('sidebar').style.display = isLanding ? 'none' : 'flex';
+  document.querySelector('.topbar').style.display = isLanding ? 'none' : 'flex';
+  document.querySelector('.mobile-nav').style.display = isLanding ? 'none' : 'flex';
+  document.getElementById('mainContent').style.marginLeft = isLanding ? '0' : '';
+
   // Update sidebar
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.section === section);
@@ -336,13 +371,15 @@ function populateCategoryDropdowns() {
 // ============================================================
 
 function calcStats() {
-  const totIncome  = state.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const totExpense = state.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  
+  const totIncome  = activeTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totExpense = activeTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const balance    = totIncome - totExpense;
 
   const curMonth = getCurrentMonthStr();
-  const monthInc = state.transactions.filter(t => t.type === 'income' && getMonthYear(t.date) === curMonth).reduce((s,t) => s + t.amount, 0);
-  const monthExp = state.transactions.filter(t => t.type === 'expense' && getMonthYear(t.date) === curMonth).reduce((s,t) => s + t.amount, 0);
+  const monthInc = activeTxns.filter(t => t.type === 'income' && getMonthYear(t.date) === curMonth).reduce((s,t) => s + t.amount, 0);
+  const monthExp = activeTxns.filter(t => t.type === 'expense' && getMonthYear(t.date) === curMonth).reduce((s,t) => s + t.amount, 0);
   const savings  = monthInc - monthExp;
 
   return { totIncome, totExpense, balance, savings };
@@ -371,6 +408,7 @@ function renderDashboard() {
   runCoach();
   prevStats = { balance, income: totIncome, expense: totExpense, savings };
 
+  renderAccountSelector();
   renderRecentTransactions();
   renderCategoryChart();
   renderWeeklyReview();
@@ -384,7 +422,8 @@ function updateMizaniScore() {
 }
 
 function calculateMizaniScore() {
-  if (state.transactions.length === 0) return 0;
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  if (activeTxns.length === 0) return 0;
   let score = 50; 
 
   // Budget Adherence
@@ -393,7 +432,7 @@ function calculateMizaniScore() {
   const budgetEntries = Object.entries(state.budgets);
   if (budgetEntries.length > 0) {
     budgetEntries.forEach(([catId, limit]) => {
-      const spent = state.transactions
+      const spent = activeTxns
         .filter(t => t.type === 'expense' && t.category === catId && getMonthYear(t.date) === curMonth)
         .reduce((s, t) => s + t.amount, 0);
       if (spent <= limit) budgetsMet++;
@@ -402,7 +441,7 @@ function calculateMizaniScore() {
   }
 
   // Impulse Control
-  const recentExpenses = state.transactions.filter(t => t.type === 'expense').slice(0, 10);
+  const recentExpenses = activeTxns.filter(t => t.type === 'expense').slice(0, 10);
   const plannedCount = recentExpenses.filter(t => t.reflection?.isPlanned !== false).length;
   if (recentExpenses.length > 0) score += (plannedCount / recentExpenses.length) * 20;
 
@@ -415,7 +454,8 @@ function renderWeeklyReview() {
 
   const now = new Date();
   const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-  const expenses = state.transactions.filter(t => t.type === 'expense' && new Date(t.date) >= startOfWeek);
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  const expenses = activeTxns.filter(t => t.type === 'expense' && new Date(t.date) >= startOfWeek);
   
   if (expenses.length === 0) {
     container.innerHTML = '<div class="empty-state">No data for this week yet.</div>';
@@ -464,7 +504,8 @@ function deleteGoal(id) {
 
 function renderRecentTransactions() {
   const container = document.getElementById('recentTransactions');
-  const recent = [...state.transactions]
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  const recent = [...activeTxns]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 6);
 
@@ -504,7 +545,7 @@ function renderTransactionsTable() {
   const categoryF = document.getElementById('filterCategory')?.value || 'all';
   const sortBy   = document.getElementById('sortBy')?.value        || 'date-desc';
 
-  let list = [...state.transactions];
+  let list = state.transactions.filter(t => t.accountId === state.activeAccountId);
 
   // Filter
   if (search) list = list.filter(t =>
@@ -659,10 +700,11 @@ function saveTransaction() {
     const idx = state.transactions.findIndex(t => t.id === state.editingId);
     if (idx !== -1) {
       state.transactions[idx] = { id: state.editingId, type, title, amount, category, date, notes, reflection };
+      state.transactions[idx].accountId = state.activeAccountId; // Keep consistency
     }
     showToast('Transaction updated', 'success');
   } else {
-    const newTxn = { id: generateId(), type, title, amount, category, date, notes, reflection, createdAt: Date.now() };
+    const newTxn = { id: generateId(), type, title, amount, category, date, notes, reflection, createdAt: Date.now(), accountId: state.activeAccountId };
     state.transactions.unshift(newTxn);
     showToast('Transaction added', 'success');
   }
@@ -733,7 +775,8 @@ function renderBudgets() {
 
   budgetList.innerHTML = entries.map(([catId, limit]) => {
     const cat  = getCategory(catId);
-    const spent = state.transactions
+    const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+    const spent = activeTxns
       .filter(t => t.type === 'expense' && t.category === catId && getMonthYear(t.date) === curMonth)
       .reduce((s, t) => s + t.amount, 0);
 
@@ -846,7 +889,8 @@ function renderCategoryChart() {
   const ctx = document.getElementById('categoryChart');
   if (!ctx) return;
 
-  const expenses = state.transactions.filter(t => t.type === 'expense');
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  const expenses = activeTxns.filter(t => t.type === 'expense');
   const byCategory = {};
   CATEGORIES.forEach(c => { byCategory[c.id] = 0; });
   expenses.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + t.amount; });
@@ -921,8 +965,9 @@ function renderTrendChart() {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  const incomes  = months.map(m => state.transactions.filter(t => t.type === 'income'  && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0));
-  const expenses = months.map(m => state.transactions.filter(t => t.type === 'expense' && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0));
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  const incomes  = months.map(m => activeTxns.filter(t => t.type === 'income'  && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0));
+  const expenses = months.map(m => activeTxns.filter(t => t.type === 'expense' && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0));
   const labels   = months.map(getMonthLabel);
   const colors   = getChartColors();
 
@@ -998,7 +1043,8 @@ function renderBreakdownChart() {
   const ctx = document.getElementById('breakdownChart');
   if (!ctx) return;
 
-  const expenses = state.transactions.filter(t => t.type === 'expense');
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
+  const expenses = activeTxns.filter(t => t.type === 'expense');
   const byCategory = {};
   CATEGORIES.forEach(c => { byCategory[c.id] = 0; });
   expenses.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + t.amount; });
@@ -1072,9 +1118,10 @@ function renderMonthlySummary() {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
   const rows = months.reverse().map(m => {
-    const inc = state.transactions.filter(t => t.type === 'income'  && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0);
-    const exp = state.transactions.filter(t => t.type === 'expense' && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0);
+    const inc = activeTxns.filter(t => t.type === 'income'  && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0);
+    const exp = activeTxns.filter(t => t.type === 'expense' && getMonthYear(t.date) === m).reduce((s,t) => s + t.amount, 0);
     return `
       <div class="monthly-summary-item">
         <span class="month-label">${getMonthLabel(m)}</span>
@@ -1161,6 +1208,41 @@ function escapeHtml(str) {
 }
 
 // ============================================================
+// ACCOUNT MANAGEMENT
+// ============================================================
+
+function renderAccountSelector() {
+  const sel = document.getElementById('accountSelect');
+  if (!sel) return;
+  sel.innerHTML = state.accounts.map(acc => 
+    `<option value="${acc.id}" ${acc.id === state.activeAccountId ? 'selected' : ''}>${acc.type === 'business' ? '💼' : '👤'} ${escapeHtml(acc.name)}</option>`
+  ).join('');
+}
+
+function switchAccount(id) {
+  state.activeAccountId = id;
+  saveActiveAccount();
+  renderCurrentSection();
+  showToast(`Switched to ${state.accounts.find(a => a.id === id).name}`, 'info');
+}
+
+function saveAccount() {
+  const name = document.getElementById('newAccountName').value.trim();
+  const type = document.getElementById('newAccountType').value;
+  if (!name) return showToast('Please enter an account name', 'error');
+
+  const newAcc = { id: 'acc_' + Date.now(), name, type };
+  state.accounts.push(newAcc);
+  saveAccounts();
+  
+  document.getElementById('newAccountName').value = '';
+  closeModal('accountModal');
+  renderAccountSelector();
+  switchAccount(newAcc.id);
+  showToast('Account created!', 'success');
+}
+
+// ============================================================
 // MIZANI COACH (AI-LIKE EXPERIENCE)
 // ============================================================
 
@@ -1170,14 +1252,15 @@ function runCoach() {
 
   const today = getTodayStr();
   const { totExpense, totIncome } = calcStats();
+  const activeTxns = state.transactions.filter(t => t.accountId === state.activeAccountId);
   
   // Get impulse totals
-  const impulseTotal = state.transactions
+  const impulseTotal = activeTxns
     .filter(t => t.type === 'expense' && t.reflection?.isPlanned === false)
     .reduce((s,t) => s + t.amount, 0);
 
   // Detect overspending vs averages (simple logic)
-  const expenses = state.transactions.filter(t => t.type === 'expense');
+  const expenses = activeTxns.filter(t => t.type === 'expense');
   const avgExpense = expenses.length > 0 ? (totExpense / 30) : 0; // monthly avg per day
   
   let insights = [];
@@ -1191,7 +1274,7 @@ function runCoach() {
   
   // Alerts for budget overruns
   const overBudgets = Object.entries(state.budgets).filter(([catId, limit]) => {
-    const spent = state.transactions.filter(t => t.category === catId && t.type === 'expense').reduce((s,t) => s + t.amount, 0);
+    const spent = activeTxns.filter(t => t.category === catId && t.type === 'expense').reduce((s,t) => s + t.amount, 0);
     return spent > limit;
   });
   
@@ -1285,6 +1368,14 @@ function setupEventListeners() {
   // Floating Action Button
   document.getElementById('fabBtn').addEventListener('click', openAddTransactionModal);
 
+  // Landing CTAs
+  document.getElementById('getStartedBtn').addEventListener('click', () => {
+    navigateTo('auth');
+  });
+  document.getElementById('tryDemoBtn').addEventListener('click', () => {
+    navigateTo('dashboard');
+  });
+
   // Hamburger
   document.getElementById('hamburgerBtn').addEventListener('click', openSidebar);
   document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
@@ -1340,6 +1431,20 @@ function setupEventListeners() {
   // Goals save
   document.getElementById('saveGoalBtn')?.addEventListener('click', saveGoal);
 
+  // Account management
+  document.getElementById('accountSelect')?.addEventListener('change', e => switchAccount(e.target.value));
+  document.getElementById('addAccountBtn')?.addEventListener('click', () => openModal('accountModal'));
+  document.getElementById('closeAccountModal')?.addEventListener('click', () => closeModal('accountModal'));
+  document.getElementById('cancelAccountModal')?.addEventListener('click', () => closeModal('accountModal'));
+  document.getElementById('saveAccountBtn')?.addEventListener('click', saveAccount);
+  document.getElementById('accountModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('accountModal');
+  });
+  document.getElementById('newAccountName')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveAccount();
+  });
+
+
   // Settings: theme toggle
   const themeToggle = document.getElementById('themeToggle');
   themeToggle.addEventListener('change', () => {
@@ -1347,7 +1452,7 @@ function setupEventListeners() {
   });
 
   // Settings: theme toggle (topbar icon)
-  document.getElementById('themeToggleTop').addEventListener('click', () => {
+  document.getElementById('themeToggleTop')?.addEventListener('click', () => {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     applyTheme(isDark ? 'light' : 'dark');
   });
@@ -1372,6 +1477,58 @@ function setupEventListeners() {
     if (e.key === 'Escape') {
       closeModal('txnModal');
       closeModal('confirmModal');
+      closeModal('accountModal');
+    }
+  });
+
+  // Auth Logic
+  const tabSignup = document.getElementById('tabSignup');
+  const tabLogin = document.getElementById('tabLogin');
+  const authTitle = document.getElementById('authTitle');
+  const authSubtitle = document.getElementById('authSubtitle');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+
+  const toggleAuth = (mode) => {
+    const isSignup = mode === 'signup';
+    tabSignup.classList.toggle('active', isSignup);
+    tabLogin.classList.toggle('active', !isSignup);
+    authTitle.textContent = isSignup ? 'Create Account' : 'Welcome Back';
+    authSubtitle.textContent = isSignup ? 'Start your financial journey with Mizani' : 'Log in to manage your finances';
+    authSubmitBtn.textContent = isSignup ? 'Create Account' : 'Log In';
+  };
+
+  tabSignup?.addEventListener('click', () => toggleAuth('signup'));
+  tabLogin?.addEventListener('click', () => toggleAuth('login'));
+
+  document.getElementById('authForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('authEmail').value;
+    const password = document.getElementById('authPassword').value;
+    const isSignup = tabSignup.classList.contains('active');
+
+    // Disable button to prevent double-submit
+    const submitBtn = document.getElementById('authSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Processing...';
+
+    try {
+      // --- THIS IS WHERE THE BACKEND CALL GOES ---
+      // Example: const user = await myAuthService.login(email, password);
+      
+      // Simulating a network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      if (email && password.length >= 6) {
+        showToast(`${isSignup ? 'Account created' : 'Welcome back'}, ${email.split('@')[0]}!`, 'success');
+        navigateTo('dashboard');
+      } else {
+        throw new Error('Invalid credentials or password too short');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = isSignup ? 'Create Account' : 'Log In';
     }
   });
 }
@@ -1403,8 +1560,20 @@ function init() {
   if (document.getElementById('themeToggle'))
   document.getElementById('themeToggle').checked = state.settings.theme === 'dark';
 
+  // Formally persist the default Personal Account if this is the first run
+  if (!localStorage.getItem(LS_KEYS.ACCOUNTS)) {
+    saveAccounts();
+    saveActiveAccount();
+  }
+
   setupEventListeners();
-  navigateTo('dashboard');
+
+  // If no transactions exist, show landing page
+  if (state.transactions.length === 0) {
+    navigateTo('landing');
+  } else {
+    navigateTo('dashboard');
+  }
 }
 
 // Run on DOM ready
