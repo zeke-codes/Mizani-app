@@ -1426,8 +1426,7 @@ async function renderSidebarFooter() {
   const authHeader = document.getElementById('sidebarAuthHeader');
   if (!footer || !authHeader) return;
 
-  // Add bottom padding to prevent mobile navigation buttons from obscuring the UI
-  footer.style.paddingBottom = '40px';
+
 
   const { data } = await supabase.auth.getSession();
   const session = data?.session;
