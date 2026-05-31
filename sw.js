@@ -1,10 +1,10 @@
-const CACHE_NAME = 'mizani-v3';
+const CACHE_NAME = 'mizani-v4';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/script.js',
-  '/supabase.js',
+  './',
+  'index.html',
+  'style.css',
+  'script.js',
+  'supabase.js',
   'https://fonts.googleapis.com/css2?family=Syne:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
 ];

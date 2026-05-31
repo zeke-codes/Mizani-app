@@ -114,9 +114,23 @@ function loadState() {
 }
 
 function saveTransactions() {
-  // Local persistence for quick loading and Guest Mode.
-  // Not a substitute for syncTransactionToBackend.
   localStorage.setItem(LS_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
+}
+
+async function syncAccountToBackend(acc) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const { error } = await supabase
+    .from('accounts')
+    .insert({
+      id: acc.id,
+      user_id: session.user.id,
+      name: acc.name,
+      type: acc.type
+    });
+
+  if (error) console.error("Account sync error:", error.message);
 }
 
 async function syncTransactionToBackend(txn) {
@@ -149,6 +163,42 @@ async function syncTransactionToBackend(txn) {
       saveTransactions();
     }
   }
+}
+
+async function syncTransactionsBulkToBackend(txns) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const toSync = txns.map(t => ({
+    user_id: session.user.id,
+    account_id: t.accountId === 'default' ? null : t.accountId,
+    amount: t.amount,
+    type: t.type,
+    category: t.category,
+    title: t.title,
+    date: t.date,
+    notes: t.notes,
+    reflection: t.reflection
+  }));
+
+  const { error } = await supabase.from("transactions").insert(toSync);
+  if (error) console.error("Bulk sync error:", error.message);
+}
+
+async function syncBudgetToBackend(catId, limit) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const { error } = await supabase
+    .from('budgets')
+    .upsert({ user_id: session.user.id, category_id: catId, limit_amount: limit }, { onConflict: 'user_id, category_id' });
+  if (error) console.error("Budget sync error:", error.message);
+}
+
+async function deleteBudgetFromBackend(catId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+  await supabase.from('budgets').delete().eq('user_id', session.user.id).eq('category_id', catId);
 }
 
 async function updateTransactionInBackend(txn) {
@@ -925,6 +975,7 @@ function saveBudget() {
 
   state.budgets[catId] = amount;
   saveBudgets();
+  syncBudgetToBackend(catId, amount);
   document.getElementById('budgetAmount').value = '';
   showToast(`Budget set for ${getCategory(catId).label}`, 'success');
   renderBudgets();
@@ -934,6 +985,7 @@ function deleteBudget(catId) {
   openConfirm('Remove Budget', `Remove budget for ${getCategory(catId).label}?`, () => {
     delete state.budgets[catId];
     saveBudgets();
+    deleteBudgetFromBackend(catId);
     showToast('Budget removed', 'success');
     renderBudgets();
   });
@@ -1259,21 +1311,42 @@ function exportCSV() {
 // ============================================================
 
 function clearAllData() {
+  const isAuth = !!localStorage.getItem('sb-fsmyzpdcmkkirfuomerv-auth-token');
+  
   openConfirm(
     'Clear All Data',
     'This will permanently delete all transactions and budgets. This action cannot be undone.',
-    () => {
-      state.transactions = [];
-      state.budgets = {};
-      state.isGuestMode = false;
-      localStorage.removeItem(LS_KEYS.GUEST_SESSION);
-      saveTransactions();
-      saveBudgets();
+    async () => {
+      if (isAuth && !state.isGuestMode) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await supabase.from('transactions').delete().eq('user_id', session.user.id);
+          await supabase.from('budgets').delete().eq('user_id', session.user.id);
+          await supabase.from('goals').delete().eq('user_id', session.user.id);
+        }
+      }
+      clearLocalUserState();
       showToast('All data cleared', 'success');
       renderCurrentSection();
       prevStats = { balance: 0, income: 0, expense: 0, savings: 0 };
     }
   );
+}
+
+function clearLocalUserState() {
+  state.transactions = [];
+  state.budgets = {};
+  state.goals = [];
+  state.accounts = [{ id: 'default', name: 'Personal Account', type: 'personal' }];
+  state.activeAccountId = 'default';
+  state.isGuestMode = false;
+
+  localStorage.removeItem(LS_KEYS.TRANSACTIONS);
+  localStorage.removeItem(LS_KEYS.BUDGETS);
+  localStorage.removeItem(LS_KEYS.GOALS);
+  localStorage.removeItem(LS_KEYS.ACCOUNTS);
+  localStorage.removeItem(LS_KEYS.ACTIVE_ACCOUNT);
+  localStorage.removeItem(LS_KEYS.GUEST_SESSION);
 }
 
 // ============================================================
@@ -1367,6 +1440,7 @@ async function renderSidebarFooter() {
 
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
       await supabase.auth.signOut();
+      clearLocalUserState();
       closeSidebar();
       navigateTo('landing');
     });
@@ -1402,10 +1476,9 @@ async function loadUserData() {
   const { data } = await supabase.auth.getSession();
   const session = data?.session;
   if (!session) return;
-
-  // Prevent data leak: Clear local demo/guest transactions 
-  // before merging real backend data.
-  state.transactions = [];
+  
+  // Show immediate loading feedback
+  showToast('Syncing with cloud...', 'info');
 
   // Load Accounts from Supabase
   const { data: dbAccounts } = await supabase
@@ -1431,11 +1504,34 @@ async function loadUserData() {
     state.transactions = dbTxns.map(t => ({
       id: t.id, type: t.type, title: t.title, amount: t.amount,
       category: t.category, date: t.date, notes: t.notes,
-      reflection: t.reflection, accountId: t.account_id
+      reflection: t.reflection, accountId: t.account_id || 'default'
     }));
   }
 
+  // Load Budgets
+  const { data: dbBudgets } = await supabase
+    .from('budgets')
+    .select('*')
+    .eq('user_id', session.user.id);
+  
+  if (dbBudgets) {
+    state.budgets = {};
+    dbBudgets.forEach(b => { state.budgets[b.category_id] = b.limit_amount; });
+  }
+
+  // Load Goals
+  const { data: dbGoals } = await supabase
+    .from('goals')
+    .select('*')
+    .eq('user_id', session.user.id);
+  
+  if (dbGoals) {
+    state.goals = dbGoals.map(g => ({ id: g.id, name: g.name, target: g.target_amount }));
+  }
+
   saveTransactions(); // Sync the cleaned/fetched data to localStorage
+  saveBudgets();
+  saveGoals();
   renderCurrentSection();
 }
 
@@ -1466,6 +1562,7 @@ function saveAccount() {
   const newAcc = { id: 'acc_' + Date.now(), name, type };
   state.accounts.push(newAcc);
   saveAccounts();
+  syncAccountToBackend(newAcc);
   
   document.getElementById('newAccountName').value = '';
   closeModal('accountModal');
@@ -1540,6 +1637,7 @@ function handleImport(e) {
       });
       state.transactions = [...newTxns, ...state.transactions];
       saveTransactions();
+      syncTransactionsBulkToBackend(newTxns);
       renderCurrentSection();
       showToast(`Imported ${newTxns.length} transactions`, 'success');
     } catch (err) {
