@@ -213,6 +213,7 @@ body {
   gap: 2px;
   padding: 16px 12px;
   flex: 1;
+  overflow-y: auto;
 }
 
 .nav-item {

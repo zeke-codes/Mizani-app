@@ -123,7 +123,7 @@ async function syncTransactionToBackend(txn) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session || state.isGuestMode) return;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("transactions")
     .insert({
       user_id: session.user.id,
@@ -135,9 +135,20 @@ async function syncTransactionToBackend(txn) {
       date: txn.date,
       notes: txn.notes,
       reflection: txn.reflection
-    });
+    })
+    .select()
+    .single();
 
-  if (error) console.error("Sync error:", error);
+  if (error) {
+    console.error("Sync error:", error.message);
+  } else if (data) {
+    // Update local ID to match database ID so future edits/deletes work
+    const idx = state.transactions.findIndex(t => t.id === txn.id);
+    if (idx !== -1) {
+      state.transactions[idx].id = data.id;
+      saveTransactions();
+    }
+  }
 }
 
 async function updateTransactionInBackend(txn) {
@@ -783,6 +794,7 @@ function saveTransaction() {
     const newTxn = { id: generateId(), type, title, amount, category, date, notes, reflection, createdAt: Date.now(), accountId: state.activeAccountId };
     state.transactions.unshift(newTxn);
     showToast('Transaction added', 'success');
+    syncTransactionToBackend(newTxn);
   }
 
   saveTransactions();
@@ -1326,7 +1338,8 @@ async function renderSidebarFooter() {
   const authHeader = document.getElementById('sidebarAuthHeader');
   if (!footer || !authHeader) return;
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session;
 
   if (session) {
     const email = session.user.email || 'User';
@@ -1341,6 +1354,10 @@ async function renderSidebarFooter() {
           <span class="user-plan">Authenticated</span>
         </div>
       </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
+      </div>
     `;
 
     // Logout button remains in the footer
@@ -1354,15 +1371,8 @@ async function renderSidebarFooter() {
       navigateTo('landing');
     });
   } else {
-    // Move Login and Sign Up buttons to the top when in Guest Mode
-    authHeader.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
-        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
-        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
-      </div>
-    `;
+    authHeader.innerHTML = '';
 
-    // Guest mode status moved to footer
     footer.innerHTML = `
       <div class="user-profile">
         <div class="user-avatar">G</div>
@@ -1370,6 +1380,10 @@ async function renderSidebarFooter() {
           <span class="user-name">Guest Mode</span>
           <span class="user-plan">Local Storage</span>
         </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
       </div>
     `;
 
@@ -1385,7 +1399,8 @@ async function renderSidebarFooter() {
 }
 
 async function loadUserData() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session;
   if (!session) return;
 
   // Prevent data leak: Clear local demo/guest transactions 
@@ -1805,7 +1820,7 @@ async function init() {
   // PWA Registration
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
+      navigator.serviceWorker.register('sw.js')
         .then(reg => console.log('Mizani Service Worker registered'))
         .catch(err => console.log('SW registration failed:', err));
     });
@@ -1833,10 +1848,16 @@ async function init() {
   setupEventListeners();
 
   // Determine whether to show landing page or dashboard based on session and local data
-  const { data: { session } } = await supabase.auth.getSession();
+  let session = null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    session = data?.session;
 
-  if (session) {
-    await loadUserData();
+    if (session) {
+      await loadUserData();
+    }
+  } catch (e) {
+    console.error("Supabase initialization failed:", e);
   }
 
   if (session || state.isGuestMode) {
