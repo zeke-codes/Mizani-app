@@ -114,9 +114,28 @@ function loadState() {
 }
 
 function saveTransactions() {
-  // Data is saved to localStorage only. 
-  // For Guest/Demo mode, no backend synchronization is performed.
   localStorage.setItem(LS_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
+}
+
+async function syncTransactionToBackend(txn) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const { error } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: session.user.id,
+      account_id: txn.accountId === 'default' ? null : txn.accountId,
+      amount: txn.amount,
+      type: txn.type,
+      category: txn.category,
+      title: txn.title,
+      date: txn.date,
+      notes: txn.notes,
+      reflection: txn.reflection
+    });
+
+  if (error) console.error("Sync error:", error);
 }
 
 function saveBudgets() {
@@ -250,7 +269,7 @@ function openConfirm(title, message, callback) {
 // NAVIGATION
 // ============================================================
 
-function navigateTo(section) {
+function navigateTo(section, authMode = null) {
   // Handle layout visibility
   const isAuthOrLanding = section === 'landing' || section === 'auth';
   
@@ -287,6 +306,10 @@ function navigateTo(section) {
 
   state.activeSection = section;
 
+  if (section === 'auth' && authMode) {
+    toggleAuth(authMode);
+  }
+
   // Update sidebar profile/auth status
   renderSidebarFooter();
 
@@ -311,6 +334,7 @@ function navigateTo(section) {
 function openSidebar() {
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebarOverlay').classList.add('open');
+  renderSidebarFooter(); // Refresh auth status whenever the mobile sidebar opens
 }
 
 function closeSidebar() {
@@ -1225,6 +1249,42 @@ function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+const toggleAuth = (mode) => {
+  const tabSignup = document.getElementById('tabSignup');
+  const tabLogin = document.getElementById('tabLogin');
+  const authTitle = document.getElementById('authTitle');
+  const authSubtitle = document.getElementById('authSubtitle');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  if (!tabSignup || !tabLogin) return;
+
+  const isSignup = mode === 'signup';
+  tabSignup.classList.toggle('active', isSignup);
+  tabLogin.classList.toggle('active', !isSignup);
+  authTitle.textContent = isSignup ? 'Create Account' : 'Welcome Back';
+  authSubtitle.textContent = isSignup ? 'Start your financial journey with Mizani' : 'Log in to manage your finances';
+  authSubmitBtn.textContent = isSignup ? 'Create Account' : 'Log In';
+};
+
+async function ensureDefaultAccount() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: accounts } = await supabase
+    .from('accounts')
+    .select('id')
+    .eq('user_id', user.id);
+
+  if (!accounts || accounts.length === 0) {
+    await supabase
+      .from('accounts')
+      .insert({
+        user_id: user.id,
+        name: 'My Wallet',
+        type: 'personal'
+      });
+  }
+}
+
 async function renderSidebarFooter() {
   const footer = document.getElementById('sidebarFooter');
   if (!footer) return;
@@ -1233,7 +1293,7 @@ async function renderSidebarFooter() {
 
   if (session) {
     const email = session.user.email || 'User';
-    const initials = email.substring(0, 2).toUpperCase();
+    const initials = email.charAt(0).toUpperCase();
     footer.innerHTML = `
       <div class="user-profile">
         <div class="user-avatar">${initials}</div>
@@ -1246,9 +1306,10 @@ async function renderSidebarFooter() {
     `;
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
       await supabase.auth.signOut();
+      closeSidebar();
       navigateTo('landing');
     });
-  } else if (state.isGuestMode) {
+  } else {
     footer.innerHTML = `
       <div class="user-profile">
         <div class="user-avatar">G</div>
@@ -1257,14 +1318,55 @@ async function renderSidebarFooter() {
           <span class="user-plan">Local Storage</span>
         </div>
       </div>
-      <button class="btn-primary full-width" style="margin-top:10px; height:34px; font-size: 0.8rem;" id="sidebarAuthBtn">Sign Up / Log In</button>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
+      </div>
     `;
-    document.getElementById('sidebarAuthBtn')?.addEventListener('click', () => {
-      navigateTo('auth');
+    document.getElementById('sidebarSignupBtn')?.addEventListener('click', () => {
+      closeSidebar();
+      navigateTo('auth', 'signup');
     });
-  } else {
-    footer.innerHTML = '';
+    document.getElementById('sidebarLoginBtn')?.addEventListener('click', () => {
+      closeSidebar();
+      navigateTo('auth', 'login');
+    });
   }
+}
+
+async function loadUserData() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+
+  // Load Accounts from Supabase
+  const { data: dbAccounts } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('user_id', session.user.id);
+  
+  if (dbAccounts && dbAccounts.length > 0) {
+    state.accounts = dbAccounts.map(a => ({ id: a.id, name: a.name, type: a.type }));
+    if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
+      state.activeAccountId = state.accounts[0].id;
+    }
+  }
+
+  // Load Transactions from Supabase
+  const { data: dbTxns } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('date', { ascending: false });
+
+  if (dbTxns) {
+    state.transactions = dbTxns.map(t => ({
+      id: t.id, type: t.type, title: t.title, amount: t.amount,
+      category: t.category, date: t.date, notes: t.notes,
+      reflection: t.reflection, accountId: t.account_id
+    }));
+  }
+
+  renderCurrentSection();
 }
 
 // ============================================================
@@ -1301,7 +1403,6 @@ function saveAccount() {
   switchAccount(newAcc.id);
   showToast('Account created!', 'success');
 }
-
 // ============================================================
 // MIZANI COACH (AI-LIKE EXPERIENCE)
 // ============================================================
@@ -1532,15 +1633,6 @@ function setupEventListeners() {
   const authSubtitle = document.getElementById('authSubtitle');
   const authSubmitBtn = document.getElementById('authSubmitBtn');
 
-  const toggleAuth = (mode) => {
-    const isSignup = mode === 'signup';
-    tabSignup.classList.toggle('active', isSignup);
-    tabLogin.classList.toggle('active', !isSignup);
-    authTitle.textContent = isSignup ? 'Create Account' : 'Welcome Back';
-    authSubtitle.textContent = isSignup ? 'Start your financial journey with Mizani' : 'Log in to manage your finances';
-    authSubmitBtn.textContent = isSignup ? 'Create Account' : 'Log In';
-  };
-
   tabSignup?.addEventListener('click', () => toggleAuth('signup'));
   tabLogin?.addEventListener('click', () => toggleAuth('login'));
 
@@ -1568,6 +1660,8 @@ function setupEventListeners() {
         } else if (data.session) {
           localStorage.removeItem(LS_KEYS.GUEST_SESSION);
           state.isGuestMode = false;
+          await ensureDefaultAccount();
+          await loadUserData();
           showToast('Account created and logged in!', 'success');
           navigateTo('dashboard');
         }
@@ -1580,6 +1674,8 @@ function setupEventListeners() {
 
         localStorage.removeItem(LS_KEYS.GUEST_SESSION);
         state.isGuestMode = false;
+        await ensureDefaultAccount();
+        await loadUserData();
         showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
         navigateTo('dashboard');
       }
@@ -1683,6 +1779,10 @@ async function init() {
 
   // Determine whether to show landing page or dashboard based on session and local data
   const { data: { session } } = await supabase.auth.getSession();
+
+  if (session) {
+    await loadUserData();
+  }
 
   if (session || state.isGuestMode) {
     // Logged in users or active guest sessions go straight to dashboard
