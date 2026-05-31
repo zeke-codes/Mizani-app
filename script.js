@@ -1,3 +1,8 @@
+import { supabase } from "./supabase.js";
+
+console.log("Supabase connected");
+console.log(supabase);
+
 /* =============================================
    MIZANI — script.js
    Vanilla JS — No frameworks
@@ -241,11 +246,13 @@ function openConfirm(title, message, callback) {
 
 function navigateTo(section) {
   // Handle layout visibility
-  const isLanding = section === 'landing' || section === 'auth';
-  document.getElementById('sidebar').style.display = isLanding ? 'none' : 'flex';
-  document.querySelector('.topbar').style.display = isLanding ? 'none' : 'flex';
-  document.querySelector('.mobile-nav').style.display = isLanding ? 'none' : 'flex';
-  document.getElementById('mainContent').style.marginLeft = isLanding ? '0' : '';
+  const isAuthOrLanding = section === 'landing' || section === 'auth';
+  
+  document.getElementById('sidebar').style.display = isAuthOrLanding ? 'none' : '';
+  document.querySelector('.topbar').style.display = isAuthOrLanding ? 'none' : '';
+  document.querySelector('.mobile-nav').style.display = isAuthOrLanding ? 'none' : '';
+  document.getElementById('fabBtn').style.display = isAuthOrLanding ? 'none' : '';
+  document.getElementById('mainContent').style.marginLeft = isAuthOrLanding ? '0' : '';
 
   // Update sidebar
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -1290,29 +1297,6 @@ function runCoach() {
   coachMsg.textContent = insights[Math.floor(Math.random() * insights.length)];
 }
 
-// ============================================================
-// EXPORT / IMPORT DATA
-// ============================================================
-
-function exportCSV() {
-  if (!state.transactions.length) {
-    showToast('No transactions to export', 'error');
-    return;
-  }
-  const headers = ['Date', 'Title', 'Type', 'Category', 'Amount', 'Notes'];
-  const rows = state.transactions.map(t => [
-    t.date, `"${t.title.replace(/"/g,'""')}"`, t.type, getCategory(t.category).label, t.amount, `"${(t.notes || '').replace(/"/g,'""')}"`
-  ]);
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `mizani_export_${getTodayStr()}.csv`;
-  a.click();
-  showToast('Data exported successfully', 'success');
-}
-
 function handleImport(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -1512,17 +1496,28 @@ function setupEventListeners() {
     submitBtn.textContent = 'Processing...';
 
     try {
-      // --- THIS IS WHERE THE BACKEND CALL GOES ---
-      // Example: const user = await myAuthService.login(email, password);
-      
-      // Simulating a network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      if (email && password.length >= 6) {
-        showToast(`${isSignup ? 'Account created' : 'Welcome back'}, ${email.split('@')[0]}!`, 'success');
-        navigateTo('dashboard');
+      if (isSignup) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        if (data.user && !data.session) {
+          showToast('Success! Please check your email to confirm your account.', 'success');
+        } else if (data.session) {
+          showToast('Account created and logged in!', 'success');
+          navigateTo('dashboard');
+        }
       } else {
-        throw new Error('Invalid credentials or password too short');
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+
+        showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
+        navigateTo('dashboard');
       }
     } catch (err) {
       showToast(err.message, 'error');
