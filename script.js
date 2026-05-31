@@ -114,6 +114,8 @@ function loadState() {
 }
 
 function saveTransactions() {
+  // Local persistence for quick loading and Guest Mode.
+  // Not a substitute for syncTransactionToBackend.
   localStorage.setItem(LS_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
 }
 
@@ -136,6 +138,38 @@ async function syncTransactionToBackend(txn) {
     });
 
   if (error) console.error("Sync error:", error);
+}
+
+async function updateTransactionInBackend(txn) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const { error } = await supabase
+    .from("transactions")
+    .update({
+      amount: txn.amount,
+      type: txn.type,
+      category: txn.category,
+      title: txn.title,
+      date: txn.date,
+      notes: txn.notes,
+      reflection: txn.reflection
+    })
+    .eq('id', txn.id);
+
+  if (error) console.error("Update sync error:", error);
+}
+
+async function deleteTransactionFromBackend(id) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || state.isGuestMode) return;
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq('id', id);
+
+  if (error) console.error("Delete sync error:", error);
 }
 
 function saveBudgets() {
@@ -713,6 +747,7 @@ function deleteTransaction(id) {
     () => {
       state.transactions = state.transactions.filter(t => t.id !== id);
       saveTransactions();
+      deleteTransactionFromBackend(id);
       showToast('Transaction deleted', 'success');
       renderCurrentSection();
     }
@@ -739,8 +774,9 @@ function saveTransaction() {
   if (state.editingId) {
     const idx = state.transactions.findIndex(t => t.id === state.editingId);
     if (idx !== -1) {
-      state.transactions[idx] = { id: state.editingId, type, title, amount, category, date, notes, reflection };
-      state.transactions[idx].accountId = state.activeAccountId; // Keep consistency
+      const updatedTxn = { id: state.editingId, type, title, amount, category, date, notes, reflection, accountId: state.activeAccountId };
+      state.transactions[idx] = updatedTxn;
+      updateTransactionInBackend(updatedTxn);
     }
     showToast('Transaction updated', 'success');
   } else {
@@ -1287,29 +1323,46 @@ async function ensureDefaultAccount() {
 
 async function renderSidebarFooter() {
   const footer = document.getElementById('sidebarFooter');
-  if (!footer) return;
+  const authHeader = document.getElementById('sidebarAuthHeader');
+  if (!footer || !authHeader) return;
 
   const { data: { session } } = await supabase.auth.getSession();
 
   if (session) {
     const email = session.user.email || 'User';
     const initials = email.charAt(0).toUpperCase();
-    footer.innerHTML = `
-      <div class="user-profile">
+    
+    // Move profile info to the top when logged in
+    authHeader.innerHTML = `
+      <div class="user-profile" style="padding: 12px 16px; border-bottom: 1px solid var(--border);">
         <div class="user-avatar">${initials}</div>
         <div class="user-info">
           <span class="user-name">${escapeHtml(email.split('@')[0])}</span>
           <span class="user-plan">Authenticated</span>
         </div>
       </div>
-      <button class="btn-secondary full-width" style="margin-top:10px; height:34px; font-size: 0.8rem;" id="logoutBtn">Log Out</button>
     `;
+
+    // Logout button remains in the footer
+    footer.innerHTML = `
+      <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="logoutBtn">Log Out</button>
+    `;
+
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
       await supabase.auth.signOut();
       closeSidebar();
       navigateTo('landing');
     });
   } else {
+    // Move Login and Sign Up buttons to the top when in Guest Mode
+    authHeader.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
+      </div>
+    `;
+
+    // Guest mode status moved to footer
     footer.innerHTML = `
       <div class="user-profile">
         <div class="user-avatar">G</div>
@@ -1318,11 +1371,8 @@ async function renderSidebarFooter() {
           <span class="user-plan">Local Storage</span>
         </div>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-        <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
-        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
-      </div>
     `;
+
     document.getElementById('sidebarSignupBtn')?.addEventListener('click', () => {
       closeSidebar();
       navigateTo('auth', 'signup');
@@ -1337,6 +1387,10 @@ async function renderSidebarFooter() {
 async function loadUserData() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
+
+  // Prevent data leak: Clear local demo/guest transactions 
+  // before merging real backend data.
+  state.transactions = [];
 
   // Load Accounts from Supabase
   const { data: dbAccounts } = await supabase
@@ -1366,6 +1420,7 @@ async function loadUserData() {
     }));
   }
 
+  saveTransactions(); // Sync the cleaned/fetched data to localStorage
   renderCurrentSection();
 }
 

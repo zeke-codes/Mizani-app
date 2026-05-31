@@ -1856,6 +1856,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   body {
     padding-bottom: 70px; /* Space for mobile nav */
   }
+
+  /* Tighten sidebar for mobile to prevent scrolling */
+  .sidebar { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .sidebar-logo { padding: 12px 16px; border-bottom: none; }
+  #sidebarAuthHeader { flex-shrink: 0; }
+  #sidebarAuthHeader .user-profile { margin-bottom: 0; }
+  .sidebar-nav { padding: 4px 8px; flex: 1; }
+  .nav-item { padding: 8px 12px; font-size: 13px; margin-bottom: 1px; }
+  .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
 }
 
 @media (max-width: 480px) {
