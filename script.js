@@ -386,15 +386,18 @@ function openConfirm(title, message, callback) {
 function navigateTo(section, authMode = null) {
   // Handle layout visibility
   const isAuthOrLanding = section === 'landing' || section === 'auth';
+  const isDashboardLayout = !isAuthOrLanding;
   
   // Toggle class for CSS padding control
   document.body.classList.toggle('landing-active', isAuthOrLanding);
-  
+  // Toggle class on body to control main-content's margin-left via CSS
+  document.body.classList.toggle('dashboard-layout-active', isDashboardLayout);
+
   document.getElementById('sidebar').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('topbar').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('mobileNav').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('fabBtn').style.display = isAuthOrLanding ? 'none' : '';
-  document.getElementById('mainContent').style.marginLeft = isAuthOrLanding ? '0' : '';
+  // Removed: document.getElementById('mainContent').style.marginLeft = isAuthOrLanding ? '0' : '';
 
   // Update sidebar
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -1477,7 +1480,7 @@ async function renderSidebarFooter() {
       </div>
       <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
         <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
-        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="LoginBtn">Log In</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
       </div>
     `;
 
@@ -1621,7 +1624,11 @@ function runCoach() {
   }
   
   if (insights.length === 0) {
-    insights.push("Your finances look stable. Keep up the great tracking habit!");
+    if (activeTxns.length === 0) {
+      insights.push("Tracking your finances to give you better insights.");
+    } else {
+      insights.push("Your finances look stable. Keep up the great tracking habit!");
+    }
   }
     
   const finalInsight = insights[Math.floor(Math.random() * insights.length)];
@@ -1723,6 +1730,15 @@ function setupEventListeners() {
 
   // Save transaction
   document.getElementById('saveTxnBtn').addEventListener('click', saveTransaction);
+
+  // Auth Back Button Logic
+  document.getElementById('authBackBtn')?.addEventListener('click', () => {
+    if (state.isGuestMode) {
+      navigateTo('dashboard');
+    } else {
+      navigateTo('landing');
+    }
+  });
 
   // Enter key in form
   ['txnTitle', 'txnAmount'].forEach(id => {

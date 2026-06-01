@@ -59,6 +59,7 @@
       flex-direction: column;
       align-items: center;
       width: 100%;
+      justify-content: center;
       gap: 0.85rem;
     }
 
@@ -227,6 +228,11 @@
     <section class="section" id="section-auth">
       <div class="auth-container">
         <div class="card auth-card">
+          <button class="btn-icon" id="authBackBtn" title="Go Back" style="position: absolute; top: 16px; left: 16px; border: none; background: transparent; width: 32px; height: 32px; z-index: 10;">
+            <svg viewBox="0 0 24 24" fill="none" width="20" height="20" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
           <div class="auth-header">
             <h2 id="authTitle">Create Account</h2>
             <p id="authSubtitle" class="section-subtitle">Start your financial journey with Mizani</p>
@@ -270,7 +276,7 @@
           <div class="coach-content">
             <div class="coach-name">Mizani Coach</div>
             <div class="coach-bubble" id="coachMessage">
-              Analyzing your spending to give you better insights...
+              Tracking your finances to give you better insights.
             </div>
           </div>
         </div>
@@ -614,7 +620,7 @@
             </div>
             <div>
               <p class="about-name">Mizani Assistant</p>
-              <p class="about-desc" id="assistantMessage">Monitoring your spending patterns to provide smart insights.</p>
+              <p class="about-desc" id="assistantMessage">Tracking your finances to give you better insights.</p>
             </div>
           </div>
         </div>

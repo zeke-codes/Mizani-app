@@ -189,7 +189,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 22px 20px;
+  height: var(--topbar-height);
+  padding: 0 20px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -331,7 +332,7 @@ body {
 
 /* ---- MAIN CONTENT ---- */
 .main-content {
-  margin-left: var(--sidebar-width);
+  /* margin-left will be controlled by JS/class for desktop */
   flex: 1;
   min-height: 100vh;
   display: flex;
@@ -1853,6 +1854,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .mobile-nav { display: flex; }
   .fab { display: flex; }
   .topbar-actions .btn-primary { display: none; }
+
+  /* On mobile, main-content should never have a left margin from the sidebar */
+  .main-content {
+    margin-left: 0 !important; /* Ensure no margin on mobile */
+  }
   
   body:not(.landing-active) {
     padding-bottom: 70px; /* Space for mobile nav */
@@ -1860,12 +1866,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
   /* Tighten sidebar for mobile to prevent scrolling */
   .sidebar { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-  .sidebar-logo { padding: 12px 16px; border-bottom: none; }
+  .sidebar-logo { border-bottom: none; }
   #sidebarAuthHeader { flex-shrink: 0; }
   #sidebarAuthHeader .user-profile { margin-bottom: 0; }
-  .sidebar-nav { padding: 4px 8px; flex: 1; }
+  .sidebar-nav { padding: 4px 8px; flex: 1; overflow-y: auto; }
   .nav-item { padding: 8px 12px; font-size: 13px; margin-bottom: 1px; }
   .sidebar-footer { padding: 12px 16px 85px; border-top: 1px solid var(--border); flex-shrink: 0; }
+}
+
+/* Apply margin-left to main-content only when dashboard layout is active and on desktop */
+@media (min-width: 769px) { /* Assuming 768px is the breakpoint for mobile */
+  body.dashboard-layout-active .main-content {
+    margin-left: var(--sidebar-width);
+  }
 }
 
 @media (max-width: 480px) {
@@ -1958,6 +1971,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   width: 100%;
   max-width: 420px;
   padding: 40px;
+  position: relative;
   animation: countUp 0.6s ease-out;
 }
 
