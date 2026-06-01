@@ -282,9 +282,10 @@ function getCurrency() {
 
 function formatAmount(amount) {
   const sym = getCurrency().symbol;
+  const isNeg = amount < 0;
   const abs = Math.abs(amount);
   const formatted = abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${sym}${formatted}`;
+  return `${isNeg ? '-' : ''}${sym}${formatted}`;
 }
 
 function formatDate(dateStr) {
@@ -1560,6 +1561,8 @@ function renderAccountSelector() {
 
 function switchAccount(id) {
   state.activeAccountId = id;
+  // Reset animation baselines so the new account starts fresh
+  prevStats = { balance: 0, income: 0, expense: 0, savings: 0 };
   saveActiveAccount();
   renderCurrentSection();
   showToast(`Switched to ${state.accounts.find(a => a.id === id).name}`, 'info');
@@ -1625,7 +1628,7 @@ function runCoach() {
   
   if (insights.length === 0) {
     if (activeTxns.length === 0) {
-      insights.push("Tracking your finances to give you better insights.");
+      insights.push("Analysing your spending habits to give you better insights.");
     } else {
       insights.push("Your finances look stable. Keep up the great tracking habit!");
     }
