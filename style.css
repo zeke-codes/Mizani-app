@@ -1854,7 +1854,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .fab { display: flex; }
   .topbar-actions .btn-primary { display: none; }
   
-  body {
+  body:not(.landing-active) {
     padding-bottom: 70px; /* Space for mobile nav */
   }
 

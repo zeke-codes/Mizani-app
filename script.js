@@ -387,6 +387,9 @@ function navigateTo(section, authMode = null) {
   // Handle layout visibility
   const isAuthOrLanding = section === 'landing' || section === 'auth';
   
+  // Toggle class for CSS padding control
+  document.body.classList.toggle('landing-active', isAuthOrLanding);
+  
   document.getElementById('sidebar').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('topbar').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('mobileNav').style.display = isAuthOrLanding ? 'none' : '';
@@ -1474,7 +1477,7 @@ async function renderSidebarFooter() {
       </div>
       <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
         <button class="btn-primary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarSignupBtn">Create Account</button>
-        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="sidebarLoginBtn">Log In</button>
+        <button class="btn-secondary full-width" style="height:34px; font-size: 0.8rem;" id="LoginBtn">Log In</button>
       </div>
     `;
 
