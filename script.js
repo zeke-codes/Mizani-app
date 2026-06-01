@@ -111,6 +111,39 @@ function loadState() {
   }
 }
 
+
+//DEMO SESSION ID - allows us to track users anonymously without forcing sign-up, and sync data if they later create an account
+let sessionId = localStorage.getItem("mizani_session");
+
+if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem("mizani_session", sessionId);
+}
+
+//TRACKING FUNCTION
+async function trackEvent(eventName, metadata = {}) {
+    try {
+        const {
+            data: { user }
+        } = await supabase.auth.getUser();
+
+        await supabase
+            .from("analytics_events")
+            .insert({
+                event_name: eventName,
+                user_id: user?.id || null,
+                session_id: sessionId,
+                metadata
+            });
+
+    } catch (error) {
+        console.error("Analytics error:", error);
+    }
+}
+
+//LANDING PAGE TRACKER
+trackEvent("landing_page_view");
+
 function saveTransactions() {
   localStorage.setItem(LS_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
 }
@@ -656,6 +689,7 @@ function saveGoal() {
   if (!name || isNaN(target)) return showToast('Enter valid goal info', 'error');
   state.goals.push({ id: Date.now(), name, target });
   saveGoals(); renderGoals(); showToast('Goal created!', 'success');
+  trackEvent("goal_created", { name, target });
 }
 
 function deleteGoal(id) {
@@ -870,6 +904,10 @@ function saveTransaction() {
     const newTxn = { id: generateId(), type, title, amount, category, date, notes, reflection, createdAt: Date.now(), accountId: state.activeAccountId };
     state.transactions.unshift(newTxn);
     showToast('Transaction added', 'success');
+    trackEvent("transaction_added", {
+      type: newTxn.type,
+      amount: newTxn.amount
+    });
     syncTransactionToBackend(newTxn);
   }
 
@@ -1004,6 +1042,7 @@ function saveBudget() {
   syncBudgetToBackend(catId, amount);
   document.getElementById('budgetAmount').value = '';
   showToast(`Budget set for ${getCategory(catId).label}`, 'success');
+  trackEvent("budget_created", { category: catId, limit: amount });
   renderBudgets();
 }
 
@@ -1628,7 +1667,7 @@ function runCoach() {
   
   if (insights.length === 0) {
     if (activeTxns.length === 0) {
-      insights.push("Analysing your spending habits to give you better insights.");
+      insights.push("Tracking your spending habits to give you better insights.");
     } else {
       insights.push("Your finances look stable. Keep up the great tracking habit!");
     }
@@ -1707,6 +1746,7 @@ function setupEventListeners() {
     state.isGuestMode = true;
     localStorage.setItem(LS_KEYS.GUEST_SESSION, 'true');
     navigateTo('dashboard');
+    trackEvent("demo_started");
     showToast('Demo Mode: Your data is stored locally and will not be synced to the backend.', 'info');
   });
 
@@ -1812,6 +1852,17 @@ function setupEventListeners() {
   document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importInput').click());
   document.getElementById('importInput').addEventListener('change', handleImport);
 
+  // Sidebar: feedback
+  document.getElementById('sidebarFeedbackBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = 'mailto:your-otienogh@ueab.ac.ke?subject=Mizani%20App%20Feedback';
+  });
+
+  // Settings: feedback
+  document.getElementById('feedbackBtn')?.addEventListener('click', () => {
+    window.location.href = 'mailto:your-otienogh@ueab.ac.ke?subject=Mizani%20App%20Feedback';
+  });
+
   // Settings: clear data
   document.getElementById('clearDataBtn').addEventListener('click', clearAllData);
 
@@ -1859,8 +1910,9 @@ function setupEventListeners() {
           localStorage.removeItem(LS_KEYS.GUEST_SESSION);
           state.isGuestMode = false;
           await ensureDefaultAccount();
-          await loadUserData();
+          await loadUserData(data.session);
           showToast('Account created and logged in!', 'success');
+          trackEvent("account_created");
           navigateTo('dashboard');
         }
       } else {
@@ -1873,8 +1925,9 @@ function setupEventListeners() {
         localStorage.removeItem(LS_KEYS.GUEST_SESSION);
         state.isGuestMode = false;
         await ensureDefaultAccount();
-        await loadUserData();
+        await loadUserData(data.session);
         showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
+        trackEvent("user_logged_in");
         navigateTo('dashboard');
       }
     } catch (err) {
