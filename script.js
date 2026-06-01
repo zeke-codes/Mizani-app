@@ -40,7 +40,6 @@ const LS_KEYS = {
   TRANSACTIONS: 'mizani_transactions',
   BUDGETS:      'mizani_budgets',
   SETTINGS:     'mizani_settings',
-  LAST_REMINDER: 'mizani_last_reminder',
   GOALS:        'mizani_goals',
   ACCOUNTS:     'mizani_accounts',
   ACTIVE_ACCOUNT: 'mizani_active_account',
@@ -57,7 +56,6 @@ let state = {
   goals:        [],
   accounts:     [{ id: 'default', name: 'Personal Account', type: 'personal' }],
   activeAccountId: 'default',
-  isGuestMode:    false,
   settings: {
     theme:    'dark',
     currency: 'USD',
@@ -197,7 +195,13 @@ async function syncTransactionsBulkToBackend(txns) {
   }));
 
   const { error } = await supabase.from("transactions").insert(toSync);
-  if (error) console.error("Bulk sync error:", error.message);
+  if (error) {
+    console.error("Bulk sync error:", error.message);
+  } else {
+    // Refresh data from backend using current session
+    const { data: { session } } = await supabase.auth.getSession();
+    await loadUserData(session);
+  }
 }
 
 async function syncBudgetToBackend(catId, limit) {
@@ -384,8 +388,8 @@ function navigateTo(section, authMode = null) {
   const isAuthOrLanding = section === 'landing' || section === 'auth';
   
   document.getElementById('sidebar').style.display = isAuthOrLanding ? 'none' : '';
-  document.querySelector('.topbar').style.display = isAuthOrLanding ? 'none' : '';
-  document.querySelector('.mobile-nav').style.display = isAuthOrLanding ? 'none' : '';
+  document.getElementById('topbar').style.display = isAuthOrLanding ? 'none' : '';
+  document.getElementById('mobileNav').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('fabBtn').style.display = isAuthOrLanding ? 'none' : '';
   document.getElementById('mainContent').style.marginLeft = isAuthOrLanding ? '0' : '';
 
@@ -933,7 +937,7 @@ function renderBudgets() {
       .filter(t => t.type === 'expense' && t.category === catId && getMonthYear(t.date) === curMonth)
       .reduce((s, t) => s + t.amount, 0);
 
-    const pct       = Math.min((spent / limit) * 100, 100);
+    const pct       = limit > 0 ? Math.min((spent / limit) * 100, 100) : (spent > 0 ? 100 : 0);
     const remaining = Math.max(limit - spent, 0);
     const isWarning = pct >= 80 && pct < 100;
     const isOver    = pct >= 100;
@@ -1485,35 +1489,30 @@ async function renderSidebarFooter() {
   }
 }
 
-async function loadUserData() {
-  const { data } = await supabase.auth.getSession();
-  const session = data?.session;
+async function loadUserData(session) {
   if (!session) return;
   
   // Show immediate loading feedback
   showToast('Syncing with cloud...', 'info');
 
-  // Load Accounts from Supabase
-  const { data: dbAccounts } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('user_id', session.user.id);
-  
+  try {
+    // Load all data in parallel for much faster mobile performance
+    const [accRes, txnRes, bgtRes, goalRes] = await Promise.all([
+      supabase.from('accounts').select('*').eq('user_id', session.user.id),
+      supabase.from('transactions').select('*').eq('user_id', session.user.id).order('date', { ascending: false }),
+      supabase.from('budgets').select('*').eq('user_id', session.user.id),
+      supabase.from('goals').select('*').eq('user_id', session.user.id)
+    ]);
+
+    const dbAccounts = accRes.data;
+    const dbTxns = txnRes.data;
+    const dbBudgets = bgtRes.data;
+    const dbGoals = goalRes.data;
+
   // Always update state to match DB, defaulting to a basic account if empty
   state.accounts = (dbAccounts && dbAccounts.length > 0)
     ? dbAccounts.map(a => ({ id: a.id, name: a.name, type: a.type }))
     : [{ id: 'default', name: 'Personal Account', type: 'personal' }];
-
-  if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
-    state.activeAccountId = state.accounts[0].id;
-  }
-
-  // Load Transactions from Supabase
-  const { data: dbTxns } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .order('date', { ascending: false });
 
   state.transactions = dbTxns ? dbTxns.map(t => ({
     id: t.id, type: t.type, title: t.title, amount: t.amount,
@@ -1521,29 +1520,24 @@ async function loadUserData() {
     reflection: t.reflection, accountId: t.account_id || 'default'
   })) : [];
 
-  // Load Budgets
-  const { data: dbBudgets } = await supabase
-    .from('budgets')
-    .select('*')
-    .eq('user_id', session.user.id);
-  
   state.budgets = {};
   if (dbBudgets) {
     dbBudgets.forEach(b => { state.budgets[b.category_id] = b.limit_amount; });
   }
 
-  // Load Goals
-  const { data: dbGoals } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('user_id', session.user.id);
-  
   state.goals = dbGoals ? dbGoals.map(g => ({ id: g.id, name: g.name, target: g.target_amount })) : [];
+
+    if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
+      state.activeAccountId = state.accounts[0].id;
+    }
 
   saveTransactions(); // Sync the cleaned/fetched data to localStorage
   saveBudgets();
   saveGoals();
-  renderCurrentSection();
+  renderCurrentSection(); // Refresh the UI with the new data
+  } catch (err) {
+    console.error("Data sync failed:", err);
+  }
 }
 
 // ============================================================
@@ -1587,7 +1581,8 @@ function saveAccount() {
 
 function runCoach() {
   const coachMsg = document.getElementById('coachMessage');
-  if (!coachMsg) return;
+  const assistantMsg = document.getElementById('assistantMessage');
+  if (!coachMsg || !assistantMsg) return;
 
   const today = getTodayStr();
   const { totExpense, totIncome } = calcStats();
@@ -1626,7 +1621,9 @@ function runCoach() {
     insights.push("Your finances look stable. Keep up the great tracking habit!");
   }
     
-  coachMsg.textContent = insights[Math.floor(Math.random() * insights.length)];
+  const finalInsight = insights[Math.floor(Math.random() * insights.length)];
+  coachMsg.textContent = finalInsight;
+  assistantMsg.textContent = finalInsight;
 }
 
 function handleImport(e) {
@@ -1873,55 +1870,6 @@ function setupEventListeners() {
 }
 
 // ============================================================
-// DEMO DATA GENERATOR
-// ============================================================
-
-function loadDemoData() {
-  const today = new Date();
-  const dummyTransactions = [
-    {
-      id: 'demo_1',
-      type: 'income',
-      title: 'Monthly Salary',
-      amount: 5000,
-      category: 'salary',
-      date: getTodayStr(),
-      accountId: 'default',
-      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
-    },
-    {
-      id: 'demo_2',
-      type: 'expense',
-      title: 'Whole Foods Market',
-      amount: 150.25,
-      category: 'food',
-      date: getTodayStr(),
-      accountId: 'default',
-      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
-    },
-    {
-      id: 'demo_3',
-      type: 'expense',
-      title: 'Netflix Subscription',
-      amount: 15.99,
-      category: 'entertainment',
-      date: getTodayStr(),
-      accountId: 'default',
-      reflection: { isPlanned: true, addsValue: true, buyAgain: true }
-    }
-  ];
-
-  state.transactions = dummyTransactions;
-  state.budgets = {
-    food: 600,
-    entertainment: 100
-  };
-  
-  saveTransactions();
-  saveBudgets();
-}
-
-// ============================================================
 // INIT
 // ============================================================
 
@@ -1956,25 +1904,30 @@ async function init() {
 
   setupEventListeners();
 
-  // Determine whether to show landing page or dashboard based on session and local data
+  // 1. Determine initial route FAST based on local storage markers
+  // This prevents the blank screen on mobile refresh
+  const hasExistingAuth = !!localStorage.getItem('sb-fsmyzpdcmkkirfuomerv-auth-token');
+  
+  if (hasExistingAuth || state.isGuestMode) {
+    navigateTo('dashboard');
+  } else {
+    navigateTo('landing');
+  }
+
+  // 2. Perform actual session check and background sync
   let session = null;
   try {
     const { data } = await supabase.auth.getSession();
     session = data?.session;
 
     if (session) {
-      await loadUserData();
+      await loadUserData(session);
+    } else if (!state.isGuestMode && hasExistingAuth) {
+      // If we thought we had auth but session is invalid, go back to landing
+      navigateTo('landing');
     }
   } catch (e) {
     console.error("Supabase initialization failed:", e);
-  }
-
-  if (session || state.isGuestMode) {
-    // Logged in users or active guest sessions go straight to dashboard
-    navigateTo('dashboard');
-  } else {
-    // First-time visitors or those who cleared data go to landing
-    navigateTo('landing');
   }
 }
 

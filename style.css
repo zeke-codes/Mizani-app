@@ -1885,7 +1885,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 #section-landing {
   padding: 0;
   display: none;
-  height: 100vh;
+  height: 100dvh;
   background: radial-gradient(circle at top right, var(--gold-dim), transparent), var(--bg-base);
 }
 
