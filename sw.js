@@ -10,12 +10,14 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
 });
 
 self.addEventListener('activate', (e) => {
+  e.waitUntil(self.clients.claim());
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(

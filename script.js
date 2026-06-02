@@ -982,8 +982,8 @@ function renderBudgets() {
       .filter(t => t.type === 'expense' && t.category === catId && getMonthYear(t.date) === curMonth)
       .reduce((s, t) => s + t.amount, 0);
 
-    const pct       = limit > 0 ? Math.min((spent / limit) * 100, 100) : (spent > 0 ? 100 : 0);
-    const remaining = Math.max(limit - spent, 0);
+    const pct       = limit > 0 ? (spent / limit) * 100 : (spent > 0 ? 100 : 0);
+    const remaining = limit - spent;
     const isWarning = pct >= 80 && pct < 100;
     const isOver    = pct >= 100;
 
@@ -1541,6 +1541,12 @@ async function loadUserData(session) {
   // Show immediate loading feedback
   showToast('Syncing with cloud...', 'info');
 
+  // Reset animation baselines so the dashboard starts fresh from zero
+  prevStats = { balance: 0, income: 0, expense: 0, savings: 0 };
+  state.transactions = []; // Clear current local state before merge
+  state.budgets = {};      // Clear guest budgets
+  state.goals = [];        // Clear guest goals
+
   try {
     // Load all data in parallel for much faster mobile performance
     const [accRes, txnRes, bgtRes, goalRes] = await Promise.all([
@@ -1555,6 +1561,8 @@ async function loadUserData(session) {
     const dbBudgets = bgtRes.data;
     const dbGoals = goalRes.data;
 
+    const primaryAccountId = (dbAccounts && dbAccounts.length > 0) ? dbAccounts[0].id : 'default';
+
   // Always update state to match DB, defaulting to a basic account if empty
   state.accounts = (dbAccounts && dbAccounts.length > 0)
     ? dbAccounts.map(a => ({ id: a.id, name: a.name, type: a.type }))
@@ -1563,7 +1571,7 @@ async function loadUserData(session) {
   state.transactions = dbTxns ? dbTxns.map(t => ({
     id: t.id, type: t.type, title: t.title, amount: t.amount,
     category: t.category, date: t.date, notes: t.notes,
-    reflection: t.reflection, accountId: t.account_id || 'default'
+    reflection: t.reflection, accountId: t.account_id || primaryAccountId
   })) : [];
 
   state.budgets = {};
@@ -1574,12 +1582,14 @@ async function loadUserData(session) {
   state.goals = dbGoals ? dbGoals.map(g => ({ id: g.id, name: g.name, target: g.target_amount })) : [];
 
     if (state.activeAccountId === 'default' || !state.accounts.some(a => a.id === state.activeAccountId)) {
-      state.activeAccountId = state.accounts[0].id;
+      state.activeAccountId = primaryAccountId;
     }
 
   saveTransactions(); // Sync the cleaned/fetched data to localStorage
   saveBudgets();
   saveGoals();
+  saveAccounts();
+  saveActiveAccount();
   renderCurrentSection(); // Refresh the UI with the new data
   } catch (err) {
     console.error("Data sync failed:", err);
@@ -1737,17 +1747,15 @@ function setupEventListeners() {
   // Landing CTAs
   document.getElementById('getStartedBtn').addEventListener('click', async () => {
     const { data } = await supabase.auth.getSession();
-    if (data.session) return navigateTo('dashboard');
-    navigateTo('auth');
-  });
-  
-  document.getElementById('tryDemoBtn').addEventListener('click', () => {
-    // In demo mode, data should not be pre-seeded, allowing users to input their own values.
-    state.isGuestMode = true;
-    localStorage.setItem(LS_KEYS.GUEST_SESSION, 'true');
-    navigateTo('dashboard');
-    trackEvent("demo_started");
-    showToast('Demo Mode: Your data is stored locally and will not be synced to the backend.', 'info');
+    if (data.session) {
+      navigateTo('dashboard');
+    } else {
+      state.isGuestMode = true;
+      localStorage.setItem(LS_KEYS.GUEST_SESSION, 'true');
+      navigateTo('dashboard');
+      trackEvent("get_started_guest_mode");
+      showToast('Welcome! You are in Guest Mode. Data is saved locally.', 'info');
+    }
   });
 
   // Hamburger
@@ -1855,12 +1863,12 @@ function setupEventListeners() {
   // Sidebar: feedback
   document.getElementById('sidebarFeedbackBtn')?.addEventListener('click', (e) => {
     e.preventDefault();
-    window.location.href = 'mailto:your-otienogh@ueab.ac.ke?subject=Mizani%20App%20Feedback';
+    window.location.href = 'mailto:zekrypt0x@gmail.com?subject=Mizani%20App%20Feedback';
   });
 
   // Settings: feedback
   document.getElementById('feedbackBtn')?.addEventListener('click', () => {
-    window.location.href = 'mailto:your-otienogh@ueab.ac.ke?subject=Mizani%20App%20Feedback';
+    window.location.href = 'mailto:zekrypt0x@gmail.com?subject=Mizani%20App%20Feedback';
   });
 
   // Settings: clear data
@@ -1907,8 +1915,7 @@ function setupEventListeners() {
         if (data.user && !data.session) {
           showToast('Success! Please check your email to confirm your account.', 'success');
         } else if (data.session) {
-          localStorage.removeItem(LS_KEYS.GUEST_SESSION);
-          state.isGuestMode = false;
+          clearLocalUserState(); // Purge any guest/demo data first
           await ensureDefaultAccount();
           await loadUserData(data.session);
           showToast('Account created and logged in!', 'success');
@@ -1922,8 +1929,7 @@ function setupEventListeners() {
         });
         if (error) throw error;
 
-        localStorage.removeItem(LS_KEYS.GUEST_SESSION);
-        state.isGuestMode = false;
+        clearLocalUserState(); // Purge any guest/demo data first
         await ensureDefaultAccount();
         await loadUserData(data.session);
         showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
@@ -1955,6 +1961,12 @@ async function init() {
       navigator.serviceWorker.register('sw.js')
         .then(reg => console.log('Mizani Service Worker registered'))
         .catch(err => console.log('SW registration failed:', err));
+
+      // Listen for the Service Worker taking control to reload the page with new changes
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) { window.location.reload(); refreshing = true; }
+      });
     });
   }
 
