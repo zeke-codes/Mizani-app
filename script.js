@@ -1538,6 +1538,8 @@ async function renderSidebarFooter() {
 async function loadUserData(session) {
   if (!session) return;
   
+  document.body.classList.add('app-loading');
+
   // Show immediate loading feedback
   showToast('Syncing with cloud...', 'info');
 
@@ -1591,6 +1593,8 @@ async function loadUserData(session) {
   saveAccounts();
   saveActiveAccount();
   renderCurrentSection(); // Refresh the UI with the new data
+  
+  document.body.classList.remove('app-loading');
   } catch (err) {
     console.error("Data sync failed:", err);
   }
@@ -1949,6 +1953,8 @@ function setupEventListeners() {
 // ============================================================
 
 async function init() {
+  document.body.classList.add('app-loading');
+
   // PWA Registration
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -1991,8 +1997,10 @@ async function init() {
   
   if (hasExistingAuth || state.isGuestMode) {
     navigateTo('dashboard');
+    if (state.isGuestMode) document.body.classList.remove('app-loading');
   } else {
     navigateTo('landing');
+    document.body.classList.remove('app-loading');
   }
 
   // 2. Perform actual session check and background sync
@@ -2007,6 +2015,7 @@ async function init() {
       // If we thought we had auth but session is invalid, go back to landing
       navigateTo('landing');
     }
+    document.body.classList.remove('app-loading');
   } catch (e) {
     console.error("Supabase initialization failed:", e);
   }
