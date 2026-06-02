@@ -1861,14 +1861,8 @@ function setupEventListeners() {
   document.getElementById('importInput').addEventListener('change', handleImport);
 
   // Sidebar: feedback
-  document.getElementById('sidebarFeedbackBtn')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.location.href = 'mailto:zekrypt0x@gmail.com?subject=Mizani%20App%20Feedback';
-  });
-
-  // Settings: feedback
-  document.getElementById('feedbackBtn')?.addEventListener('click', () => {
-    window.location.href = 'mailto:zekrypt0x@gmail.com?subject=Mizani%20App%20Feedback';
+  document.getElementById('sidebarFeedbackBtn')?.addEventListener('click', () => {
+    closeSidebar();
   });
 
   // Settings: clear data
